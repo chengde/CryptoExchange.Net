@@ -734,15 +734,15 @@ namespace CryptoExchange.Net.OrderBook
                     var (prevBestBid, prevBestAsk) = BestOffers;
                     ProcessRangeUpdates(item.StartUpdateId, item.EndUpdateId, item.Bids, item.Asks);
 
-                    if (_asks.Count == 0 || _bids.Count == 0)
-                        return;
-
-                    if (_asks.First().Key < _bids.First().Key)
+                    if (_asks.Count > 0 && _bids.Count > 0)
                     {
-                        _logger.OrderBookOutOfSyncDetected(Api, Symbol, _asks.First().Key, _bids.First().Key);
-                        _stopProcessing = true;
-                        Resubscribe();
-                        return;
+                        if (_asks.First().Key < _bids.First().Key)
+                        {
+                            _logger.OrderBookOutOfSyncDetected(Api, Symbol, _asks.First().Key, _bids.First().Key);
+                            _stopProcessing = true;
+                            Resubscribe();
+                            return;
+                        }
                     }
 
                     OnOrderBookUpdate?.Invoke((item.Bids.ToArray(), item.Asks.ToArray()));
