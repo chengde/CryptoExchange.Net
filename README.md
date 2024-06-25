@@ -19,6 +19,7 @@ The following API's are directly supported. Note that there are 3rd party implem
 |Bybit|[JKorf/Bybit.Net](https://github.com/JKorf/Bybit.Net)|[![Nuget version](https://img.shields.io/nuget/v/Bybit.net.svg?style=flat-square)](https://www.nuget.org/packages/Bybit.Net)|
 |CoinEx|[JKorf/CoinEx.Net](https://github.com/JKorf/CoinEx.Net)|[![Nuget version](https://img.shields.io/nuget/v/CoinEx.net.svg?style=flat-square)](https://www.nuget.org/packages/CoinEx.Net)|
 |CoinGecko|[JKorf/CoinGecko.Net](https://github.com/JKorf/CoinGecko.Net)|[![Nuget version](https://img.shields.io/nuget/v/CoinGecko.net.svg?style=flat-square)](https://www.nuget.org/packages/CoinGecko.Net)|
+|Gate.io|[JKorf/GateIo.Net](https://github.com/JKorf/GateIo.Net)|[![Nuget version](https://img.shields.io/nuget/v/GateIo.net.svg?style=flat-square)](https://www.nuget.org/packages/GateIo.Net)|
 |Huobi/HTX|[JKorf/Huobi.Net](https://github.com/JKorf/Huobi.Net)|[![Nuget version](https://img.shields.io/nuget/v/Huobi.net.svg?style=flat-square)](https://www.nuget.org/packages/Huobi.Net)|
 |Kraken|[JKorf/Kraken.Net](https://github.com/JKorf/Kraken.Net)|[![Nuget version](https://img.shields.io/nuget/v/KrakenExchange.net.svg?style=flat-square)](https://www.nuget.org/packages/KrakenExchange.Net)|
 |Kucoin|[JKorf/Kucoin.Net](https://github.com/JKorf/Kucoin.Net)|[![Nuget version](https://img.shields.io/nuget/v/Kucoin.net.svg?style=flat-square)](https://www.nuget.org/packages/Kucoin.Net)|
@@ -45,6 +46,41 @@ Make a one time donation in a crypto currency of your choice. If you prefer to d
 Alternatively, sponsor me on Github using [Github Sponsors](https://github.com/sponsors/JKorf). 
 
 ## Release notes
+* Version 7.7.2 - 25 Jun 2024
+    * Fixed ratelimiting issue possibly creating negative delays
+
+* Version 7.7.1 - 23 Jun 2024
+    * Fixes for caching implementation
+
+* Version 7.7.0 - 23 Jun 2024
+    * Caching support
+        * Caching is supported for GET requests within a certain time frame
+        * Enable caching by setting CachingEnabled to true in the client options
+        * Added DataSource to CallResult object
+    * Dedicated websocket connection
+        * Added functionality for always having a connection open which can then be used for order operations
+        * This eliminates the initial connection time for the first request
+        * WebSocket connection can be prepared by calling PrepareConnectionsAsync on the Api client, for example `await binanceSocketClient.SpotApi.PrepareConnectionsAsync()`. This is only needed initially; it will be reconnected when connection is lost.
+    * Added CancellationToken support for websocket queries
+    * Added SocketConnection parameter to SocketApiClient.GetAuthenticationRequest method
+    * Added ObjectStringConverter base converter for deserializing nested json strings
+    * Fixed websocket issue with ratelimiting and reconnecting interaction
+    * Fixed rate limiting issue with sub-millisecond delays
+    * Fixed websocket connection will now close if authentication fails because of not set credentials
+    * Updated websocket reconnection handling and options, added backoff policy
+    * Removed check for confirmed subscription as data often is pushed before the subscription is confirmed
+
+* Version 7.6.0 - 11 Jun 2024
+    * Added support for specifying seperate uri and body parameters
+    * Added support for different message and handling generic types on socket queries
+    * Added support for PATCH http method requests
+    * Added support for setting http request body to a specific type directly
+    * Split DataEvent.Topic into StreamId and Symbol properties
+    * Added support for negative time values parsing
+    * Added some helper methods for converting DataEvent to CallResult
+    * Added support for GZip/Deflate automatic decompressing in the default HttpClient
+    * Updated some testing methods
+
 * Version 7.5.2 - 07 May 2024
     * Fixed SetApiCredentials not correctly being used by rate limiter causing exception
 

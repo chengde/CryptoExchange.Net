@@ -332,6 +332,11 @@ namespace CryptoExchange.Net.Objects
         public TimeSpan? ResponseTime { get; set; }
 
         /// <summary>
+        /// The data source of this result
+        /// </summary>
+        public ResultDataSource DataSource { get; set; } = ResultDataSource.Server;
+
+        /// <summary>
         /// Create a new result
         /// </summary>
         /// <param name="code"></param>
@@ -344,6 +349,7 @@ namespace CryptoExchange.Net.Objects
         /// <param name="requestBody"></param>
         /// <param name="requestMethod"></param>
         /// <param name="requestHeaders"></param>
+        /// <param name="dataSource"></param>
         /// <param name="data"></param>
         /// <param name="error"></param>
         public WebCallResult(
@@ -357,6 +363,7 @@ namespace CryptoExchange.Net.Objects
             string? requestBody,
             HttpMethod? requestMethod,
             IEnumerable<KeyValuePair<string, IEnumerable<string>>>? requestHeaders,
+            ResultDataSource dataSource,
             [AllowNull] T data,
             Error? error) : base(data, originalData, error)
         {
@@ -370,6 +377,7 @@ namespace CryptoExchange.Net.Objects
             RequestBody = requestBody;
             RequestHeaders = requestHeaders;
             RequestMethod = requestMethod;
+            DataSource = dataSource;
         }
 
         /// <summary>
@@ -393,7 +401,7 @@ namespace CryptoExchange.Net.Objects
         /// Create a new error result
         /// </summary>
         /// <param name="error">The error</param>
-        public WebCallResult(Error? error) : this(null, null, null, null, null, null, null, null, null, null, default, error) { }
+        public WebCallResult(Error? error) : this(null, null, null, null, null, null, null, null, null, null, ResultDataSource.Server, default, error) { }
 
         /// <summary>
         /// Copy the WebCallResult to a new data type
@@ -403,7 +411,7 @@ namespace CryptoExchange.Net.Objects
         /// <returns></returns>
         public new WebCallResult<K> As<K>([AllowNull] K data)
         {
-            return new WebCallResult<K>(ResponseStatusCode, ResponseHeaders, ResponseTime, ResponseLength, OriginalData, RequestId, RequestUrl, RequestBody, RequestMethod, RequestHeaders, data, Error);
+            return new WebCallResult<K>(ResponseStatusCode, ResponseHeaders, ResponseTime, ResponseLength, OriginalData, RequestId, RequestUrl, RequestBody, RequestMethod, RequestHeaders, DataSource, data, Error);
         }
 
         /// <summary>
@@ -414,7 +422,16 @@ namespace CryptoExchange.Net.Objects
         /// <returns></returns>
         public new WebCallResult<K> AsError<K>(Error error)
         {
-            return new WebCallResult<K>(ResponseStatusCode, ResponseHeaders, ResponseTime, ResponseLength, OriginalData, RequestId, RequestUrl, RequestBody, RequestMethod, RequestHeaders, default, error);
+            return new WebCallResult<K>(ResponseStatusCode, ResponseHeaders, ResponseTime, ResponseLength, OriginalData, RequestId, RequestUrl, RequestBody, RequestMethod, RequestHeaders, DataSource, default, error);
+        }
+
+        /// <summary>
+        /// Return a copy of this result with data source set to cache
+        /// </summary>
+        /// <returns></returns>
+        internal WebCallResult<T> Cached()
+        {
+            return new WebCallResult<T>(ResponseStatusCode, ResponseHeaders, ResponseTime, ResponseLength, OriginalData, RequestId, RequestUrl, RequestBody, RequestMethod, RequestHeaders, ResultDataSource.Cache, Data, Error);
         }
 
         /// <inheritdoc />

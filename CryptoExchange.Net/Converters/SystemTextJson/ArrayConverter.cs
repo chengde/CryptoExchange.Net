@@ -81,7 +81,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
             private static object ParseObject(ref Utf8JsonReader reader, object result, Type objectType)
             {
                 if (reader.TokenType != JsonTokenType.StartArray)
-                    throw new Exception("1");
+                    throw new Exception("Not an array");
 
                 if (!_typeAttributesCache.TryGetValue(objectType, out var attributes))
                     attributes = CacheTypeAttributes(objectType);
@@ -92,8 +92,11 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                     if (reader.TokenType == JsonTokenType.EndArray)
                         break;
 
-                var attribute = attributes.SingleOrDefault(a => a.ArrayProperty.Index == index);
-                var targetType = attribute.PropertyInfo.PropertyType;
+                    var attribute = attributes.SingleOrDefault(a => a.ArrayProperty.Index == index);
+                    if (attribute == null)
+                        continue;
+
+                    var targetType = attribute.PropertyInfo.PropertyType;
 
                     object? value = null;
                     if (attribute.JsonConverterType != null)

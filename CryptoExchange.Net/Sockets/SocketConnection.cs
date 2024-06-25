@@ -175,6 +175,11 @@ namespace CryptoExchange.Net.Sockets
             }
         }
 
+        /// <summary>
+        /// Whether this connection should be kept alive even when there is no subscription
+        /// </summary>
+        public bool DedicatedRequestConnection { get; internal set; }
+
         private bool _pausedActivity;
         private readonly object _listenersLock;
         private readonly List<IMessageProcessor> _listeners;
@@ -443,7 +448,7 @@ namespace CryptoExchange.Net.Sockets
                 // 4. Get the listeners interested in this message
                 List<IMessageProcessor> processors;
                 lock (_listenersLock)
-                    processors = _listeners.Where(s => s.ListenerIdentifiers.Contains(listenId) && s.CanHandleData).ToList();
+                    processors = _listeners.Where(s => s.ListenerIdentifiers.Contains(listenId)).ToList();
 
                 if (processors.Count == 0)
                 {
@@ -451,7 +456,7 @@ namespace CryptoExchange.Net.Sockets
                     {
                         List<string> listenerIds;
                         lock (_listenersLock)
-                            listenerIds = _listeners.Where(l => l.CanHandleData).SelectMany(l => l.ListenerIdentifiers).ToList();
+                            listenerIds = _listeners.SelectMany(l => l.ListenerIdentifiers).ToList();
                         _logger.ReceivedMessageNotMatchedToAnyListener(SocketId, listenId, string.Join(",", listenerIds));
                         UnhandledMessage?.Invoke(_accessor);
                     }
@@ -478,6 +483,10 @@ namespace CryptoExchange.Net.Sockets
                         continue;
                     }
 
+                    if (processor is Subscription subscriptionProcessor && !subscriptionProcessor.Confirmed)
+                        // If this message is for this listener then it is automatically confirmed, even if the subscription is not (yet) confirmed
+                        subscriptionProcessor.Confirmed = true;
+
                     // 6. Deserialize the message
                     object? deserialized = null;
                     desCache?.TryGetValue(messageType, out deserialized);
@@ -498,7 +507,7 @@ namespace CryptoExchange.Net.Sockets
                     try
                     {
                         var innerSw = Stopwatch.StartNew();
-                        processor.Handle(this, new DataEvent<object>(deserialized, null, originalData, receiveTime, null));
+                        processor.Handle(this, new DataEvent<object>(deserialized, null, null, originalData, receiveTime, null));
                         totalUserTime += (int)innerSw.ElapsedMilliseconds;
                     }
                     catch (Exception ex)
@@ -604,7 +613,7 @@ namespace CryptoExchange.Net.Sockets
             bool shouldCloseConnection;
             lock (_listenersLock)
             {
-                shouldCloseConnection = _listeners.OfType<Subscription>().All(r => !r.UserSubscription || r.Closed);
+                shouldCloseConnection = _listeners.OfType<Subscription>().All(r => !r.UserSubscription || r.Closed) && !DedicatedRequestConnection;
                 if (shouldCloseConnection)
                     Status = SocketStatus.Closing;
             }
@@ -686,27 +695,30 @@ namespace CryptoExchange.Net.Sockets
         /// </summary>
         /// <param name="query">Query to send</param>
         /// <param name="continueEvent">Wait event for when the socket message handler can continue</param>
+        /// <param name="ct">Cancellation token</param>
         /// <returns></returns>
-        public virtual async Task<CallResult> SendAndWaitQueryAsync(Query query, ManualResetEvent? continueEvent = null)
+        public virtual async Task<CallResult> SendAndWaitQueryAsync(Query query, ManualResetEvent? continueEvent = null, CancellationToken ct = default)
         {
-            await SendAndWaitIntAsync(query, continueEvent).ConfigureAwait(false);
+            await SendAndWaitIntAsync(query, continueEvent, ct).ConfigureAwait(false);
             return query.Result ?? new CallResult(new ServerError("Timeout"));
         }
 
         /// <summary>
         /// Send a query request and wait for an answer
         /// </summary>
-        /// <typeparam name="T">Query response type</typeparam>
+        /// <typeparam name="THandlerResponse">Expected result type</typeparam>
+        /// <typeparam name="TServerResponse">The type returned to the caller</typeparam>
         /// <param name="query">Query to send</param>
         /// <param name="continueEvent">Wait event for when the socket message handler can continue</param>
+        /// <param name="ct">Cancellation token</param>
         /// <returns></returns>
-        public virtual async Task<CallResult<T>> SendAndWaitQueryAsync<T>(Query<T> query, ManualResetEvent? continueEvent = null)
+        public virtual async Task<CallResult<THandlerResponse>> SendAndWaitQueryAsync<TServerResponse, THandlerResponse>(Query<TServerResponse, THandlerResponse> query, ManualResetEvent? continueEvent = null, CancellationToken ct = default)
         {
-            await SendAndWaitIntAsync(query, continueEvent).ConfigureAwait(false);
-            return query.TypedResult ?? new CallResult<T>(new ServerError("Timeout"));
+            await SendAndWaitIntAsync(query, continueEvent, ct).ConfigureAwait(false);
+            return query.TypedResult ?? new CallResult<THandlerResponse>(new ServerError("Timeout"));
         }
 
-        private async Task SendAndWaitIntAsync(Query query, ManualResetEvent? continueEvent)
+        private async Task SendAndWaitIntAsync(Query query, ManualResetEvent? continueEvent, CancellationToken ct = default)
         {
             lock(_listenersLock)
                 _listeners.Add(query);
@@ -723,7 +735,7 @@ namespace CryptoExchange.Net.Sockets
 
             try
             {
-                while (true)
+                while (!ct.IsCancellationRequested)
                 {
                     if (!_socket.IsOpen)
                     {
@@ -734,10 +746,16 @@ namespace CryptoExchange.Net.Sockets
                     if (query.Completed)
                         return;
 
-                    await query.WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+                    await query.WaitAsync(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
 
                     if (query.Completed)
                         return;
+                }
+
+                if (ct.IsCancellationRequested)
+                {
+                    query.Fail(new CancellationRequestedError());
+                    return;
                 }
             }
             finally
@@ -798,20 +816,23 @@ namespace CryptoExchange.Net.Sockets
             if (!_socket.IsOpen)
                 return new CallResult(new WebError("Socket not connected"));
 
-            bool anySubscriptions;
-            lock (_listenersLock)
-                anySubscriptions = _listeners.OfType<Subscription>().Any(s => s.UserSubscription);
-            if (!anySubscriptions)
+            if (!DedicatedRequestConnection)
             {
-                // No need to resubscribe anything
-                _logger.NothingToResubscribeCloseConnection(SocketId);
-                _ = _socket.CloseAsync();
-                return new CallResult(null);
+                bool anySubscriptions;
+                lock (_listenersLock)
+                    anySubscriptions = _listeners.OfType<Subscription>().Any(s => s.UserSubscription);
+                if (!anySubscriptions)
+                {
+                    // No need to resubscribe anything
+                    _logger.NothingToResubscribeCloseConnection(SocketId);
+                    _ = _socket.CloseAsync();
+                    return new CallResult(null);
+                }
             }
 
             bool anyAuthenticated;
             lock (_listenersLock)
-                anyAuthenticated = _listeners.OfType<Subscription>().Any(s => s.Authenticated);
+                anyAuthenticated = _listeners.OfType<Subscription>().Any(s => s.Authenticated) || DedicatedRequestConnection;
             if (anyAuthenticated)
             {
                 // If we reconnected a authenticated connection we need to re-authenticate
@@ -860,6 +881,8 @@ namespace CryptoExchange.Net.Sockets
                     { 
                         subscription.HandleSubQueryResponse(subQuery.Response!);
                         waitEvent.Set();
+                        if (r.Result.Success)
+                            subscription.Confirmed = true;
                         return r.Result;
                     }));
                 }
@@ -868,9 +891,6 @@ namespace CryptoExchange.Net.Sockets
                 if (taskList.Any(t => !t.Result.Success))
                     return taskList.First(t => !t.Result.Success).Result;
             }
-
-            foreach (var subscription in subList)
-                subscription.Confirmed = true;
 
             if (!_socket.IsOpen)
                 return new CallResult(new WebError("Socket not connected"));

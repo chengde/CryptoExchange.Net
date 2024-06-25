@@ -50,13 +50,17 @@ namespace CryptoExchange.Net.Testing
         /// <param name="name">Method name for looking up json test values</param>
         /// <param name="nestedJsonProperty">Use nested json property for compare</param>
         /// <param name="ignoreProperties">Ignore certain properties</param>
+        /// <param name="useFirstUpdateItem">Use the first item of an array update</param>
+        /// <param name="addressPath">Path</param>
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
         public async Task ValidateAsync<TUpdate>(
             Func<TClient, Action<DataEvent<TUpdate>>, Task<CallResult<UpdateSubscription>>> methodInvoke,
             string name,
             string? nestedJsonProperty = null,
-            List<string>? ignoreProperties = null)
+            List<string>? ignoreProperties = null,
+            string? addressPath = null,
+            bool? useFirstUpdateItem = null)
         {
             var listener = new EnumValueTraceListener();
             Trace.Listeners.Add(listener);
@@ -79,7 +83,7 @@ namespace CryptoExchange.Net.Testing
             var data = Encoding.UTF8.GetString(buffer);
             using var reader = new StringReader(data);
 
-            var socket = TestHelpers.ConfigureSocketClient(_client);
+            var socket = TestHelpers.ConfigureSocketClient(_client, addressPath == null ? _baseAddress : _baseAddress.AppendPath(addressPath));
 
             var waiter = new AutoResetEvent(false);
             string? lastMessage = null;
@@ -109,6 +113,7 @@ namespace CryptoExchange.Net.Testing
                     if (lastMessage == null)
                         throw new Exception($"{name} expected to {line} to be send to server but did not receive anything");
 
+
                     var lastMessageJson = JToken.Parse(lastMessage);
                     var expectedJson = JToken.Parse(line.Substring(2));
                     foreach(var item in expectedJson)
@@ -120,6 +125,12 @@ namespace CryptoExchange.Net.Testing
                                 // |x| values are used to replace parts or response messages
                                 overrideKey = val.ToString();
                                 overrideValue = lastMessageJson[prop.Name]?.Value<string>();
+                            }
+                            else if (val.ToString() == "-999")
+                            {
+                                // -999 value is used to replace parts or response messages
+                                overrideKey = val.ToString();
+                                overrideValue = lastMessageJson[prop.Name]?.Value<decimal>().ToString();
                             }
                             else if (lastMessageJson[prop.Name]?.Value<string>() != val.ToString() && ignoreProperties?.Contains(prop.Name) != true)
                                 throw new Exception($"{name} Expected {prop.Name} to be {val}, but was {lastMessageJson[prop.Name]?.Value<string>()}");
@@ -150,9 +161,9 @@ namespace CryptoExchange.Net.Testing
                         throw new Exception($"{name} Update send to client did not trigger in update handler");
 
                     if (_stjCompare == true)
-                        SystemTextJsonComparer.CompareData(name, update, compareData, nestedJsonProperty ?? _nestedPropertyForCompare, ignoreProperties);
+                        SystemTextJsonComparer.CompareData(name, update, compareData, nestedJsonProperty ?? _nestedPropertyForCompare, ignoreProperties, useFirstUpdateItem ?? false);
                     else
-                        JsonNetComparer.CompareData(name, update, compareData, nestedJsonProperty ?? _nestedPropertyForCompare, ignoreProperties);
+                        JsonNetComparer.CompareData(name, update, compareData, nestedJsonProperty ?? _nestedPropertyForCompare, ignoreProperties, useFirstUpdateItem ?? false);
                 }
             }
 
