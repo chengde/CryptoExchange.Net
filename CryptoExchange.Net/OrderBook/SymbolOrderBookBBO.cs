@@ -120,7 +120,7 @@ namespace CryptoExchange.Net.OrderBook
         public event Action<(ISymbolOrderBookEntry BestBid, ISymbolOrderBookEntry BestAsk)>? OnBestOffersChanged;
 
         /// <inheritdoc/>
-        public event Action<(IEnumerable<ISymbolOrderBookEntry> Bids, IEnumerable<ISymbolOrderBookEntry> Asks)>? OnOrderBookUpdate;
+        public event Action<(ISymbolOrderBookEntry[] Bids, ISymbolOrderBookEntry[] Asks)>? OnOrderBookUpdate;
 
         /// <inheritdoc/>
         public DateTime UpdateTime { get; private set; }
@@ -132,29 +132,29 @@ namespace CryptoExchange.Net.OrderBook
         public int BidCount { get; private set; }
 
         /// <inheritdoc/>
-        public IEnumerable<ISymbolOrderBookEntry> Asks
+        public ISymbolOrderBookEntry[] Asks
         {
             get
             {
                 lock (_bookLock)
                 {
-                    return _ask != null ? new List<ISymbolOrderBookEntry>() { _ask }  : new List<ISymbolOrderBookEntry>();
+                    return _ask != null ? [ _ask ]  : [];
                 }
             }
         }
 
         /// <inheritdoc/>
-        public IEnumerable<ISymbolOrderBookEntry> Bids 
+        public ISymbolOrderBookEntry[] Bids 
         {
             get
             {
                 lock (_bookLock)
-                    return _bid != null ? new List<ISymbolOrderBookEntry>() { _bid } : new List<ISymbolOrderBookEntry>();
+                    return _bid != null ? [_bid]  : [];
             }
         }
 
         /// <inheritdoc/>
-        public (IEnumerable<ISymbolOrderBookEntry> bids, IEnumerable<ISymbolOrderBookEntry> asks) Book
+        public (ISymbolOrderBookEntry[] bids, ISymbolOrderBookEntry[] asks) Book
         {
             get
             {
