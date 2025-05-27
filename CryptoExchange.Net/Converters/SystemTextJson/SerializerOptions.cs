@@ -39,6 +39,9 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 
                 options.TypeInfoResolver = typeResolver;
                 _cache.TryAdd(typeResolver, options);
+                #if !DEBUG
+                        options.TypeInfoResolverChain.Add(JsonSerializerOptions.Default.TypeInfoResolver!);
+                #endif
             }
 
             return options;
