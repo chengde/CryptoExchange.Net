@@ -39,9 +39,9 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 
                 options.TypeInfoResolver = typeResolver;
                 _cache.TryAdd(typeResolver, options);
-                #if !DEBUG
+#if !DEBUG  // Not adding default TypeInfoResolver in Debug mode so that we could find missing converters in JsonSerializerContext
                         options.TypeInfoResolverChain.Add(JsonSerializerOptions.Default.TypeInfoResolver!);
-                #endif
+#endif
             }
 
             return options;
