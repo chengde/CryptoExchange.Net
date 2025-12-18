@@ -1,10 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using System;
+﻿using CryptoExchange.Net.Interfaces;
+using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Threading;
 using System.Threading.Tasks;
-using CryptoExchange.Net.Interfaces;
 
 namespace CryptoExchange.Net.Requests
 {
@@ -19,13 +21,16 @@ namespace CryptoExchange.Net.Requests
         public HttpStatusCode StatusCode => _response.StatusCode;
 
         /// <inheritdoc />
+        public Version HttpVersion => _response.Version;
+
+        /// <inheritdoc />
         public bool IsSuccessStatusCode => _response.IsSuccessStatusCode;
 
         /// <inheritdoc />
         public long? ContentLength => _response.Content.Headers.ContentLength;
 
         /// <inheritdoc />
-        public KeyValuePair<string, string[]>[] ResponseHeaders => _response.Headers.Select(x => new KeyValuePair<string, string[]>(x.Key, x.Value.ToArray())).ToArray();
+        public HttpResponseHeaders ResponseHeaders => _response.Headers;
 
         /// <summary>
         /// Create response for a http response message
@@ -37,9 +42,13 @@ namespace CryptoExchange.Net.Requests
         }
 
         /// <inheritdoc />
-        public async Task<Stream> GetResponseStreamAsync()
+        public async Task<Stream> GetResponseStreamAsync(CancellationToken cancellationToken)
         {
-            return await _response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            #if NET5_0_OR_GREATER
+                return await _response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            #else
+                return await _response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            #endif
         }
 
         /// <inheritdoc />

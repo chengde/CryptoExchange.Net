@@ -1,7 +1,6 @@
 ﻿using CryptoExchange.Net.Objects;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
@@ -58,19 +57,19 @@ namespace CryptoExchange.Net.SharedApis
         public virtual Error? ValidateRequest(string exchange, ExchangeParameters? exchangeParameters, TradingMode? tradingMode, TradingMode[] supportedTradingModes)
         {
             if (tradingMode != null && !supportedTradingModes.Contains(tradingMode.Value))
-                return new ArgumentError($"ApiType.{tradingMode} is not supported, supported types: {string.Join(", ", supportedTradingModes)}");
+                return ArgumentError.Invalid("TradingMode", $"TradingMode.{tradingMode} is not supported, supported types: {string.Join(", ", supportedTradingModes)}");
 
             foreach (var param in RequiredExchangeParameters)
             {
                 if (!string.IsNullOrEmpty(param.Name))
                 {
                     if (ExchangeParameters.HasValue(exchangeParameters, exchange, param.Name!, param.ValueType) != true)
-                        return new ArgumentError($"Required exchange parameter `{param.Name}` for exchange `{exchange}` is missing or has incorrect type. Expected type is {param.ValueType.Name}. Example: {param.ExampleValue}");
+                        return ArgumentError.Invalid(param.Name!, $"Required exchange parameter `{param.Name}` for exchange `{exchange}` is missing or has incorrect type. Expected type is {param.ValueType.Name}. Example: {param.ExampleValue}");
                 }
                 else
                 {
                     if (param.Names!.All(x => ExchangeParameters.HasValue(exchangeParameters, exchange, x, param.ValueType) != true))
-                        return new ArgumentError($"One of exchange parameters `{string.Join(", ", param.Names!)}` for exchange `{exchange}` should be provided. Example: {param.ExampleValue}");
+                        return ArgumentError.Invalid(string.Join("/", param.Names!), $"One of exchange parameters `{string.Join(", ", param.Names!)}` for exchange `{exchange}` should be provided. Example: {param.ExampleValue}");
                 }
             }
 
@@ -110,6 +109,15 @@ namespace CryptoExchange.Net.SharedApis
         public List<ParameterDescription> RequiredOptionalParameters { get; set; } = new List<ParameterDescription>();
 
         /// <summary>
+        /// Whether this accepts multiple symbols (Only applicable to request requiring symbol parameters)
+        /// </summary>
+        public bool SupportsMultipleSymbols { get; set; } = false;
+        /// <summary>
+        /// The max number of symbols which can be passed in a call (Only applicable to request requiring symbol parameters)
+        /// </summary>
+        public int? MaxSymbolCount { get; set; }
+
+        /// <summary>
         /// ctor
         /// </summary>
         public EndpointOptions(bool needsAuthentication) : base(typeof(T).Name, needsAuthentication)
@@ -131,12 +139,25 @@ namespace CryptoExchange.Net.SharedApis
                 if (!string.IsNullOrEmpty(param.Name))
                 {
                     if (typeof(T).GetProperty(param.Name)!.GetValue(request, null) == null)
-                        return new ArgumentError($"Required optional parameter `{param.Name}` for exchange `{exchange}` is missing. Example: {param.ExampleValue}");
+                        return ArgumentError.Invalid(param.Name!, $"Required optional parameter `{param.Name}` for exchange `{exchange}` is missing. Example: {param.ExampleValue}");
                 }
                 else
                 {
                     if (param.Names!.All(x => typeof(T).GetProperty(param.Name!)!.GetValue(request, null) == null))
-                        return new ArgumentError($"One of optional parameters `{string.Join(", ", param.Names!)}` for exchange `{exchange}` should be provided. Example: {param.ExampleValue}");
+                        return ArgumentError.Invalid(string.Join("/", param.Names!), $"One of optional parameters `{string.Join(", ", param.Names!)}` for exchange `{exchange}` should be provided. Example: {param.ExampleValue}");
+                }
+
+            }
+
+            if (request is SharedSymbolRequest symbolsRequest)
+            {
+                if (symbolsRequest.Symbols != null) 
+                {
+                    if (!SupportsMultipleSymbols)
+                        return ArgumentError.Invalid(nameof(SharedSymbolRequest.Symbols), $"Only a single symbol parameter is allowed, multiple symbols are not supported");
+
+                    if (symbolsRequest.Symbols.Length > MaxSymbolCount)
+                        return ArgumentError.Invalid(nameof(SharedSymbolRequest.Symbols), $"Max number of symbols is {MaxSymbolCount} but {symbolsRequest.Symbols.Length} were passed");
                 }
 
             }

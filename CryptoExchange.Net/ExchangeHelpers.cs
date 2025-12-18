@@ -1,7 +1,9 @@
 ﻿using CryptoExchange.Net.Objects;
+using CryptoExchange.Net.Objects.Sockets;
 using CryptoExchange.Net.SharedApis;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading;
@@ -87,8 +89,6 @@ namespace CryptoExchange.Net
                     value -= offset;
                 else value += (step.Value - offset);
             }
-
-            value = RoundDown(value, 8);
                 
             return value.Normalize();
         }
@@ -340,6 +340,147 @@ namespace CryptoExchange.Net
             adjustedQuantity = AdjustValueStep(symbol.MinTradeQuantity ?? 0, symbol.MaxTradeQuantity ?? decimal.MaxValue, symbol.QuantityStep, minNotionalAdjust ? RoundingType.Up : RoundingType.Down, adjustedQuantity);
             adjustedQuantity = symbol.QuantityDecimals.HasValue ? (minNotionalAdjust ? RoundUp(adjustedQuantity, symbol.QuantityDecimals.Value) : RoundDown(adjustedQuantity, symbol.QuantityDecimals.Value)) : adjustedQuantity;
 
+        }
+
+        /// <summary>
+        /// Queue updates received from a websocket subscriptions and process them async
+        /// </summary>
+        /// <typeparam name="T">The queued update type</typeparam>
+        /// <param name="subscribeCall">The subscribe call</param>
+        /// <param name="asyncHandler">The async update handler</param>
+        /// <param name="maxQueuedItems">The max number of updates to be queued up. When happens when the queue is full and a new write is attempted can be specified with <see>fullMode</see></param>
+        /// <param name="fullBehavior">What should happen if the queue contains <see>maxQueuedItems</see> pending updates. If no max is set this setting is ignored</param>
+        public static async Task<CallResult<UpdateSubscription>> ProcessQueuedAsync<T>(
+            Func<Action<DataEvent<T>>, Task<CallResult<UpdateSubscription>>> subscribeCall,
+            Func<DataEvent<T>, Task> asyncHandler,
+            int? maxQueuedItems = null,
+            QueueFullBehavior? fullBehavior = null)
+        {
+            var processor = new ProcessQueue<DataEvent<T>>(asyncHandler, maxQueuedItems, fullBehavior);
+            await processor.StartAsync().ConfigureAwait(false);
+            var result = await subscribeCall(upd => processor.Write(upd)).ConfigureAwait(false);
+            if (!result)
+            {
+                await processor.StopAsync().ConfigureAwait(false);
+                return result;
+            }
+
+            processor.Exception += result.Data._subscription.InvokeExceptionHandler;
+            result.Data.SubscriptionStatusChanged += (upd) =>
+            {
+                if (upd == CryptoExchange.Net.Objects.SubscriptionStatus.Closed)
+                    _ = processor.StopAsync(true);
+            };
+
+            return result;
+        }
+
+        /// <summary>
+        /// Queue updates and process them async
+        /// </summary>
+        /// <typeparam name="T">The queued update type</typeparam>
+        /// <param name="subscribeCall">The subscribe call</param>
+        /// <param name="asyncHandler">The async update handler</param>
+        /// <param name="maxQueuedItems">The max number of updates to be queued up. When happens when the queue is full and a new write is attempted can be specified with <see>fullMode</see></param>
+        /// <param name="fullBehavior">What should happen if the queue contains <see>maxQueuedItems</see> pending updates. If no max is set this setting is ignored</param>
+        /// <param name="ct">Cancellation token to stop the processing</param>
+        public static async Task ProcessQueuedAsync<T>(
+            Func<Action<T>, Task> subscribeCall,
+            Func<T, Task> asyncHandler,
+            CancellationToken ct,
+            int? maxQueuedItems = null,
+            QueueFullBehavior? fullBehavior = null)
+        {
+            var processor = new ProcessQueue<T>(asyncHandler, maxQueuedItems, fullBehavior);
+            await processor.StartAsync().ConfigureAwait(false);
+            ct.Register(async () =>
+            {
+                await processor.StopAsync().ConfigureAwait(false);
+            });
+
+            await subscribeCall(upd => processor.Write(upd)).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Queue updates received from a websocket subscriptions and process them async
+        /// </summary>
+        /// <typeparam name="TEventType">The type of the queued item</typeparam>
+        /// <typeparam name="TOutputType">The type of the item to pass to the processor</typeparam>
+        /// <param name="subscribeCall">The subscribe call</param>
+        /// <param name="mapper">The mapper function to go from <see>TEventType</see> to <see>TOutputType</see></param>
+        /// <param name="asyncHandler">The async update handler</param>
+        /// <param name="maxQueuedItems">The max number of updates to be queued up. When happens when the queue is full and a new write is attempted can be specified with <see>fullMode</see></param>
+        /// <param name="fullBehavior">What should happen if the queue contains <see>maxQueuedItems</see> pending updates. If no max is set this setting is ignored</param>
+        public static async Task<CallResult<UpdateSubscription>> ProcessQueuedAsync<TEventType, TOutputType>(
+            Func<ProcessQueue<DataEvent<TEventType>>, Task<CallResult<UpdateSubscription>>> subscribeCall,
+            Func<DataEvent<TEventType>, DataEvent<TOutputType>> mapper,
+            Func<DataEvent<TOutputType>, Task> asyncHandler,
+            int? maxQueuedItems = null,
+            QueueFullBehavior? fullBehavior = null
+            )
+        {
+            var processor = new ProcessQueue<DataEvent<TEventType>>((update) => {
+                return asyncHandler.Invoke(mapper.Invoke(update));
+            }, maxQueuedItems, fullBehavior);
+            await processor.StartAsync().ConfigureAwait(false);
+            var result = await subscribeCall(processor).ConfigureAwait(false);
+            if (!result)
+            {
+                await processor.StopAsync().ConfigureAwait(false);
+                return result;
+            }
+
+            processor.Exception += result.Data._subscription.InvokeExceptionHandler;
+            result.Data.SubscriptionStatusChanged += (upd) =>
+            {
+                if (upd == SubscriptionStatus.Closed)
+                    _ = processor.StopAsync(true);
+            };
+
+            return result;
+        }
+
+        /// <summary>
+        /// Parse a decimal value from a string
+        /// </summary>
+        public static decimal? ParseDecimal(string? value)
+        {
+            // Value is null or empty is the most common case to return null so check before trying to parse
+            if (string.IsNullOrEmpty(value))            
+                return null;            
+
+            // Try parse, only fails for these reasons:
+            // 1. string is null or empty
+            // 2. value is larger or smaller than decimal max/min
+            // 3. unparsable format
+            if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var decValue))
+                return decValue;
+
+            // Check for values which should be parsed to null
+            if (string.Equals("null", value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals("NaN", value, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // Infinity value should be parsed to min/max value
+            if (string.Equals("Infinity", value, StringComparison.OrdinalIgnoreCase))
+                return decimal.MaxValue;
+            else if(string.Equals("-Infinity", value, StringComparison.OrdinalIgnoreCase))
+                    return decimal.MinValue;
+
+            if (value!.Length > 27 && decimal.TryParse(value.Substring(0, 27), out var overflowValue))
+            {
+                // Not a valid decimal value and more than 27 chars, from which the first part can be parsed correctly.
+                // assume overflow
+                if (overflowValue < 0)
+                    return decimal.MinValue;
+                else
+                    return decimal.MaxValue;
+            }
+
+            // Unknown decimal format, return null
+            return null;
         }
     }
 }

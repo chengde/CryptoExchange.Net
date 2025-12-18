@@ -1,5 +1,5 @@
 using System.Linq;
-using CryptoExchange.Net.Interfaces;
+using CryptoExchange.Net.Interfaces.Clients;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -21,6 +21,8 @@ namespace CryptoExchange.Net.Clients
         protected BaseRestClient(ILoggerFactory? loggerFactory, string name) : base(loggerFactory, name)
         {
             _logger = loggerFactory?.CreateLogger(name + ".RestClient") ?? NullLoggerFactory.Instance.CreateLogger(name);
+
+            LibraryHelpers.StaticLogger = loggerFactory?.CreateLogger("CryptoExchange");
         }
     }
 }

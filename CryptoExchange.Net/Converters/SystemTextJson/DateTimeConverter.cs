@@ -1,5 +1,5 @@
-﻿using System;
-using System.Diagnostics;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
@@ -14,8 +14,8 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
     {
         private static readonly DateTime _epoch = new(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         private const long _ticksPerSecond = TimeSpan.TicksPerMillisecond * 1000;
-        private const double _ticksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000d;
-        private const double _ticksPerNanosecond = TimeSpan.TicksPerMillisecond / 1000d / 1000;
+        private const decimal _ticksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000m;
+        private const decimal _ticksPerNanosecond = TimeSpan.TicksPerMillisecond / 1000m / 1000;
 
         /// <inheritdoc />
         public override bool CanConvert(Type typeToConvert)
@@ -26,92 +26,107 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
         /// <inheritdoc />
         public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
         {
-            return typeToConvert == typeof(DateTime) ? new DateTimeConverterInner<DateTime>() : new DateTimeConverterInner<DateTime?>();
+            return typeToConvert == typeof(DateTime) ? new DateTimeConverterInner() : new NullableDateTimeConverterInner();
         }
 
-        private class DateTimeConverterInner<T> : JsonConverter<T>
+        private class NullableDateTimeConverterInner : JsonConverter<DateTime?>
         {
-            public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-                => (T)((object?)ReadDateTime(ref reader, typeToConvert, options) ?? default(T))!;
+            public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+                => ReadDateTime(ref reader, typeToConvert, options);
 
-            private DateTime? ReadDateTime(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
-                if (reader.TokenType == JsonTokenType.Null)
-                {
-                    if (typeToConvert == typeof(DateTime))
-                        Trace.WriteLine($"{DateTime.Now:yyyy/MM/dd HH:mm:ss:fff} | Warning | DateTime value of null, but property is not nullable");
-                    return default;
-                }
-
-                if (reader.TokenType is JsonTokenType.Number)
-                {
-                    var longValue = reader.GetDouble();
-                    if (longValue == 0 || longValue < 0)
-                        return default;
-
-                    return ParseFromDouble(longValue);
-                }
-                else if (reader.TokenType is JsonTokenType.String)
-                {
-                    var stringValue = reader.GetString();
-                    if (string.IsNullOrWhiteSpace(stringValue)
-                        || stringValue == "-1"
-                        || stringValue == "0001-01-01T00:00:00Z"
-                        || double.TryParse(stringValue, out var doubleVal) && doubleVal == 0)
-                    {
-                        return default;
-                    }
-
-                    return ParseFromString(stringValue!);
-                }
-                else
-                {
-                    return reader.GetDateTime();
-                }
-            }
-
-            public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+            public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
             {
                 if (value == null)
                 {
                     writer.WriteNullValue();
+                    return;
                 }
+
+                if (value.Value == default)
+                    writer.WriteStringValue(default(DateTime));
                 else
+                    writer.WriteNumberValue((long)Math.Round((value.Value - new DateTime(1970, 1, 1)).TotalMilliseconds));
+            }
+        }
+
+        private class DateTimeConverterInner : JsonConverter<DateTime>
+        {
+            public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+                => ReadDateTime(ref reader, typeToConvert, options) ?? default;            
+
+            public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+            {
+                var dtValue = value;
+                if (dtValue == default)
+                    writer.WriteStringValue(default(DateTime));
+                else
+                    writer.WriteNumberValue((long)Math.Round((dtValue - new DateTime(1970, 1, 1)).TotalMilliseconds));
+            }
+        }
+
+        private static DateTime? ReadDateTime(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Null)
+            {
+                if (typeToConvert == typeof(DateTime))
+                    LibraryHelpers.StaticLogger?.LogWarning("DateTime value of null, but property is not nullable. Resolver: {Resolver}", options.TypeInfoResolver?.GetType()?.Name);
+                return default;
+            }
+
+            if (reader.TokenType is JsonTokenType.Number)
+            {
+                var decValue = reader.GetDecimal();
+                if (decValue == 0 || decValue < 0)
+                    return default;
+
+                return ParseFromDecimal(decValue);
+            }
+            else if (reader.TokenType is JsonTokenType.String)
+            {
+                var stringValue = reader.GetString();
+                if (string.IsNullOrWhiteSpace(stringValue)
+                    || stringValue!.Equals("-1", StringComparison.Ordinal)
+                    || stringValue!.Equals("0001-01-01T00:00:00Z", StringComparison.OrdinalIgnoreCase)
+                    || decimal.TryParse(stringValue, out var decVal) && decVal == 0)
                 {
-                    var dtValue = (DateTime)(object)value;
-                    if (dtValue == default)
-                        writer.WriteStringValue(default(DateTime));
-                    else
-                        writer.WriteNumberValue((long)Math.Round((dtValue - new DateTime(1970, 1, 1)).TotalMilliseconds));
+                    return default;
                 }
+
+                return ParseFromString(stringValue!, options.TypeInfoResolver?.GetType()?.Name);
+            }
+            else
+            {
+                return reader.GetDateTime();
             }
         }
 
         /// <summary>
-        /// Parse a long value to datetime
+        /// Parse a double value to datetime
         /// </summary>
-        /// <param name="longValue"></param>
-        /// <returns></returns>
-        public static DateTime ParseFromDouble(double longValue)
-        {
-            if (longValue < 19999999999)
-                return ConvertFromSeconds(longValue);
-            if (longValue < 19999999999999)
-                return ConvertFromMilliseconds(longValue);
-            if (longValue < 19999999999999999)
-                return ConvertFromMicroseconds(longValue);
+        public static DateTime ParseFromDouble(double value)
+            => ParseFromDecimal((decimal)value);
 
-            return ConvertFromNanoseconds(longValue);
+        /// <summary>
+        /// Parse a decimal value to datetime
+        /// </summary>
+        public static DateTime ParseFromDecimal(decimal value)
+        {
+            if (value < 19999999999)
+                return ConvertFromSeconds(value);
+            if (value < 19999999999999)
+                return ConvertFromMilliseconds(value);
+            if (value < 19999999999999999)
+                return ConvertFromMicroseconds(value);
+
+            return ConvertFromNanoseconds(value);
         }
 
         /// <summary>
         /// Parse a string value to datetime
         /// </summary>
-        /// <param name="stringValue"></param>
-        /// <returns></returns>
-        public static DateTime ParseFromString(string stringValue)
+        public static DateTime ParseFromString(string stringValue, string? resolverName)
         {
-            if (stringValue!.Length == 12 && stringValue.StartsWith("202"))
+            if (stringValue!.Length == 12 && stringValue.StartsWith("202", StringComparison.OrdinalIgnoreCase))
             {
                 // Parse 202303261200 format
                 if (!int.TryParse(stringValue.Substring(0, 4), out var year)
@@ -120,7 +135,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                     || !int.TryParse(stringValue.Substring(8, 2), out var hour)
                     || !int.TryParse(stringValue.Substring(10, 2), out var minute))
                 {
-                    Trace.WriteLine($"{DateTime.Now:yyyy/MM/dd HH:mm:ss:fff} | Warning | Unknown DateTime format: " + stringValue);
+                    LibraryHelpers.StaticLogger?.LogWarning("Unknown DateTime format: {Value}. Resolver: {Resolver}", stringValue, resolverName);
                     return default;
                 }
                 return new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Utc);
@@ -133,7 +148,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                     || !int.TryParse(stringValue.Substring(4, 2), out var month)
                     || !int.TryParse(stringValue.Substring(6, 2), out var day))
                 {
-                    Trace.WriteLine($"{DateTime.Now:yyyy/MM/dd HH:mm:ss:fff} | Warning | Unknown DateTime format: " + stringValue);
+                    LibraryHelpers.StaticLogger?.LogWarning("Unknown DateTime format: {Value}. Resolver: {Resolver}", stringValue, resolverName);
                     return default;
                 }
                 return new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc);
@@ -146,25 +161,25 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                     || !int.TryParse(stringValue.Substring(2, 2), out var month)
                     || !int.TryParse(stringValue.Substring(4, 2), out var day))
                 {
-                    Trace.WriteLine("{DateTime.Now:yyyy/MM/dd HH:mm:ss:fff} | Warning | Unknown DateTime format: " + stringValue);
+                    LibraryHelpers.StaticLogger?.LogWarning("Unknown DateTime format: {Value}. Resolver: {Resolver}", stringValue, resolverName);
                     return default;
                 }
                 return new DateTime(year + 2000, month, day, 0, 0, 0, DateTimeKind.Utc);
             }
 
-            if (double.TryParse(stringValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleValue))
+            if (decimal.TryParse(stringValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalValue))
             {
                 // Parse 1637745563.000 format
-                if (doubleValue <= 0)
+                if (decimalValue <= 0)
                     return default;
-                if (doubleValue < 19999999999)
-                    return ConvertFromSeconds(doubleValue);
-                if (doubleValue < 19999999999999)
-                    return ConvertFromMilliseconds((long)doubleValue);
-                if (doubleValue < 19999999999999999)
-                    return ConvertFromMicroseconds((long)doubleValue);
+                if (decimalValue < 19999999999)
+                    return ConvertFromSeconds(decimalValue);
+                if (decimalValue < 19999999999999)
+                    return ConvertFromMilliseconds(decimalValue);
+                if (decimalValue < 19999999999999999)
+                    return ConvertFromMicroseconds(decimalValue);
 
-                return ConvertFromNanoseconds((long)doubleValue);
+                return ConvertFromNanoseconds(decimalValue);
             }
 
             if (stringValue.Length == 10)
@@ -175,7 +190,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                     || !int.TryParse(values[1], out var month)
                     || !int.TryParse(values[2], out var day))
                 {
-                    Trace.WriteLine("{DateTime.Now:yyyy/MM/dd HH:mm:ss:fff} | Warning | Unknown DateTime format: " + stringValue);
+                    LibraryHelpers.StaticLogger?.LogWarning("Unknown DateTime format: {Value}. Resolver: {Resolver}", stringValue, resolverName);
                     return default;
                 }
 
@@ -188,54 +203,70 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
         /// <summary>
         /// Convert a seconds since epoch (01-01-1970) value to DateTime
         /// </summary>
-        /// <param name="seconds"></param>
-        /// <returns></returns>
-        public static DateTime ConvertFromSeconds(double seconds) => _epoch.AddTicks((long)Math.Round(seconds * _ticksPerSecond));
-        /// <summary>
-        /// Convert a milliseconds since epoch (01-01-1970) value to DateTime
-        /// </summary>
-        /// <param name="milliseconds"></param>
-        /// <returns></returns>
-        public static DateTime ConvertFromMilliseconds(double milliseconds) => _epoch.AddTicks((long)Math.Round(milliseconds * TimeSpan.TicksPerMillisecond));
-        /// <summary>
-        /// Convert a microseconds since epoch (01-01-1970) value to DateTime
-        /// </summary>
-        /// <param name="microseconds"></param>
-        /// <returns></returns>
-        public static DateTime ConvertFromMicroseconds(double microseconds) => _epoch.AddTicks((long)Math.Round(microseconds * _ticksPerMicrosecond));
+        public static DateTime ConvertFromSeconds(decimal seconds) => _epoch.AddTicks((long)Math.Round(seconds * _ticksPerSecond));
         /// <summary>
         /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
         /// </summary>
-        /// <param name="nanoseconds"></param>
-        /// <returns></returns>
-        public static DateTime ConvertFromNanoseconds(double nanoseconds) => _epoch.AddTicks((long)Math.Round(nanoseconds * _ticksPerNanosecond));
+        public static DateTime ConvertFromSeconds(double seconds) => ConvertFromSeconds((decimal)seconds);
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromSeconds(long seconds) => ConvertFromSeconds((decimal)seconds);
+        /// <summary>
+        /// Convert a milliseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromMilliseconds(decimal milliseconds) => _epoch.AddTicks((long)Math.Round(milliseconds * TimeSpan.TicksPerMillisecond));
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromMilliseconds(double milliseconds) => ConvertFromMilliseconds((decimal)milliseconds);
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromMilliseconds(long milliseconds) => ConvertFromMilliseconds((decimal)milliseconds);
+        /// <summary>
+        /// Convert a microseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromMicroseconds(decimal microseconds) => _epoch.AddTicks((long)Math.Round(microseconds * _ticksPerMicrosecond));
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromMicroseconds(double microseconds) => ConvertFromMicroseconds((decimal)microseconds);
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromMicroseconds(long microseconds) => ConvertFromMicroseconds((decimal)microseconds);
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromNanoseconds(decimal nanoseconds) => _epoch.AddTicks((long)Math.Round(nanoseconds * _ticksPerNanosecond));
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromNanoseconds(double nanoseconds) => ConvertFromNanoseconds((decimal)nanoseconds);
+        /// <summary>
+        /// Convert a nanoseconds since epoch (01-01-1970) value to DateTime
+        /// </summary>
+        public static DateTime ConvertFromNanoseconds(long nanoseconds) => ConvertFromNanoseconds((decimal)nanoseconds);
 
         /// <summary>
         /// Convert a DateTime value to seconds since epoch (01-01-1970) value
         /// </summary>
-        /// <param name="time"></param>
-        /// <returns></returns>
         [return: NotNullIfNotNull("time")]
         public static long? ConvertToSeconds(DateTime? time) => time == null ? null : (long)Math.Round((time.Value - _epoch).TotalSeconds);
         /// <summary>
         /// Convert a DateTime value to milliseconds since epoch (01-01-1970) value
         /// </summary>
-        /// <param name="time"></param>
-        /// <returns></returns>
         [return: NotNullIfNotNull("time")]
         public static long? ConvertToMilliseconds(DateTime? time) => time == null ? null : (long)Math.Round((time.Value - _epoch).TotalMilliseconds);
         /// <summary>
         /// Convert a DateTime value to microseconds since epoch (01-01-1970) value
         /// </summary>
-        /// <param name="time"></param>
-        /// <returns></returns>
         [return: NotNullIfNotNull("time")]
         public static long? ConvertToMicroseconds(DateTime? time) => time == null ? null : (long)Math.Round((time.Value - _epoch).Ticks / _ticksPerMicrosecond);
         /// <summary>
         /// Convert a DateTime value to nanoseconds since epoch (01-01-1970) value
         /// </summary>
-        /// <param name="time"></param>
-        /// <returns></returns>
         [return: NotNullIfNotNull("time")]
         public static long? ConvertToNanoseconds(DateTime? time) => time == null ? null : (long)Math.Round((time.Value - _epoch).Ticks / _ticksPerNanosecond);
     }

@@ -1,13 +1,16 @@
 ﻿@page "/"
+@inject IAsterRestClient asterClient
 @inject IBinanceRestClient binanceClient
 @inject IBingXRestClient bingXClient
 @inject IBitfinexRestClient bitfinexClient
 @inject IBitgetRestClient bitgetClient
 @inject IBitMartRestClient bitmartClient
 @inject IBitMEXRestClient bitmexClient
+@inject IBloFinRestClient bloFinClient
 @inject IBybitRestClient bybitClient
 @inject ICoinbaseRestClient coinbaseClient
 @inject ICoinExRestClient coinexClient
+@inject ICoinWRestClient coinWClient
 @inject ICryptoComRestClient cryptocomClient
 @inject IDeepCoinRestClient deepCoinClient
 @inject IGateIoRestClient gateioClient
@@ -17,7 +20,10 @@
 @inject IKucoinRestClient kucoinClient
 @inject IMexcRestClient mexcClient
 @inject IOKXRestClient okxClient
+@inject IToobitRestClient toobitClient
+@inject IUpbitRestClient upbitClient
 @inject IWhiteBitRestClient whitebitClient
+@inject IXTRestClient xtClient
 
 <h3>BTC-USD prices:</h3>
 @foreach(var price in _prices.OrderBy(p => p.Key))
@@ -30,27 +36,36 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var asterTask = asterClient.SpotApi.ExchangeData.GetTickerAsync("BTCUSDT");
         var binanceTask = binanceClient.SpotApi.ExchangeData.GetTickerAsync("BTCUSDT");
         var bingXTask = bingXClient.SpotApi.ExchangeData.GetTickersAsync("BTC-USDT");
         var bitfinexTask = bitfinexClient.SpotApi.ExchangeData.GetTickerAsync("tBTCUSD");
-        var bitgetTask = bitgetClient.SpotApi.ExchangeData.GetTickerAsync("BTCUSDT_SPBL");
+        var bitgetTask = bitgetClient.SpotApiV2.ExchangeData.GetTickersAsync("BTCUSDT");
         var bitmartTask = bitmartClient.SpotApi.ExchangeData.GetTickerAsync("BTC_USDT");
         var bitmexTask = bitmexClient.ExchangeApi.ExchangeData.GetSymbolsAsync("XBT_USDT");
+        var bloFinTask = bloFinClient.FuturesApi.ExchangeData.GetTickersAsync("BTC-USDT");
         var bybitTask = bybitClient.V5Api.ExchangeData.GetSpotTickersAsync("BTCUSDT");
         var coinbaseTask = coinbaseClient.AdvancedTradeApi.ExchangeData.GetSymbolAsync("BTC-USDT");
         var coinexTask = coinexClient.SpotApiV2.ExchangeData.GetTickersAsync(["BTCUSDT"]);
+        var coinWTask = coinWClient.SpotApi.ExchangeData.GetTickersAsync();
         var cryptocomTask = cryptocomClient.ExchangeApi.ExchangeData.GetTickersAsync("BTC_USDT");
         var deepCoinTask = deepCoinClient.ExchangeApi.ExchangeData.GetTickersAsync(DeepCoin.Net.Enums.SymbolType.Spot);
         var gateioTask = gateioClient.SpotApi.ExchangeData.GetTickersAsync("BTC_USDT");
         var htxTask = htxClient.SpotApi.ExchangeData.GetTickerAsync("btcusdt");
-        var hyperLiquidTask = hyperLiquidClient.FuturesApi.ExchangeData.GetExchangeInfoAndTickersAsync(); // HyperLiquid does not have BTC spot trading
+        var hyperLiquidTask = hyperLiquidClient.FuturesApi.ExchangeData.GetExchangeInfoAndTickersAsync();
         var krakenTask = krakenClient.SpotApi.ExchangeData.GetTickerAsync("XBTUSD");
         var kucoinTask = kucoinClient.SpotApi.ExchangeData.GetTickerAsync("BTC-USDT");
         var mexcTask = mexcClient.SpotApi.ExchangeData.GetTickerAsync("BTCUSDT");
-        var okxTask = okxClient.UnifiedApi.ExchangeData.GetTickerAsync("BTCUSDT");
+        var okxTask = okxClient.UnifiedApi.ExchangeData.GetTickerAsync("BTC-USDT");
+        var toobitTask = toobitClient.SpotApi.ExchangeData.GetTickersAsync("BTCUSDT");
+        var upbitTask = upbitClient.SpotApi.ExchangeData.GetTickerAsync("USDT-BTC");
         var whitebitTask = whitebitClient.V4Api.ExchangeData.GetTickersAsync();
+        var xtTask = xtClient.SpotApi.ExchangeData.GetTickersAsync("btc_usdt");
 
-        await Task.WhenAll(binanceTask, bingXTask, bitfinexTask, bitgetTask, bitmartTask, bybitTask, coinexTask, deepCoinTask, gateioTask, htxTask, krakenTask, kucoinTask, mexcTask, okxTask);
+        await Task.WhenAll(asterTask, binanceTask, bingXTask, bitfinexTask, bitgetTask, bitmartTask, bloFinTask, bitmexTask, bybitTask, coinexTask, coinWTask, deepCoinTask, gateioTask, htxTask, krakenTask, kucoinTask, mexcTask, okxTask);
+
+        if (asterTask.Result.Success)
+            _prices.Add("Aster", asterTask.Result.Data.LastPrice);
 
         if (binanceTask.Result.Success)
             _prices.Add("Binance", binanceTask.Result.Data.LastPrice);
@@ -62,13 +77,16 @@
             _prices.Add("Bitfinex", bitfinexTask.Result.Data.LastPrice);
 
         if (bitgetTask.Result.Success)
-            _prices.Add("Bitget", bitgetTask.Result.Data.ClosePrice);
+            _prices.Add("Bitget", bitgetTask.Result.Data.Single().LastPrice);
 
         if (bitmartTask.Result.Success)
-            _prices.Add("BitMart", bitgetTask.Result.Data.ClosePrice);
+            _prices.Add("BitMart", bitmartTask.Result.Data.LastPrice);
 
         if (bitmexTask.Result.Success)
             _prices.Add("BitMEX", bitmexTask.Result.Data.First().LastPrice);
+
+        if (bloFinTask.Result.Success)
+            _prices.Add("BloFin", bloFinTask.Result.Data.First().LastPrice);
 
         if (bybitTask.Result.Success)
             _prices.Add("Bybit", bybitTask.Result.Data.List.First().LastPrice);
@@ -78,6 +96,9 @@
 
         if (coinexTask.Result.Success)
             _prices.Add("CoinEx", coinexTask.Result.Data.Single().LastPrice);
+
+        if (coinWTask.Result.Success)
+            _prices.Add("CoinW", coinWTask.Result.Data.Single(x => x.Symbol == "BTC_USDT").LastPrice);
 
         if (cryptocomTask.Result.Success)
             _prices.Add("CryptoCom", cryptocomTask.Result.Data.First().LastPrice ?? 0);
@@ -114,11 +135,20 @@
         if (okxTask.Result.Success)
             _prices.Add("OKX", okxTask.Result.Data.LastPrice ?? 0);
 
+        if (toobitTask.Result.Success)
+            _prices.Add("Toobit", toobitTask.Result.Data.Single().LastPrice ?? 0);
+
+        if (upbitTask.Result.Success)
+            _prices.Add("Upbit", upbitTask.Result.Data.LastPrice ?? 0);
+
         if (whitebitTask.Result.Success){
             // WhiteBit API doesn't offer an endpoint to filter for a specific ticker, so we have to filter client side
             var tickers = whitebitTask.Result.Data;
             _prices.Add("WhiteBit", tickers.Single(x => x.Symbol == "BTC_USDT").LastPrice);
         }
+
+        if (xtTask.Result.Success)
+            _prices.Add("XT", xtTask.Result.Data.Single().LastPrice ?? 0);
     }
 
 }

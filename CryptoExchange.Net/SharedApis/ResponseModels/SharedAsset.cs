@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 
 namespace CryptoExchange.Net.SharedApis
 {
@@ -67,6 +66,10 @@ namespace CryptoExchange.Net.SharedApis
         /// Min number of confirmations
         /// </summary>
         public int? MinConfirmations { get; set; }
+        /// <summary>
+        /// The contract address
+        /// </summary>
+        public string? ContractAddress { get; set; }
 
         /// <summary>
         /// ctor

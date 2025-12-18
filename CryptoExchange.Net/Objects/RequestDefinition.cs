@@ -63,6 +63,11 @@ namespace CryptoExchange.Net.Objects
         public bool PreventCaching { get; set; }
 
         /// <summary>
+        /// Whether the response to this requests should attempted to be parsed even when the status indicates failure
+        /// </summary>
+        public bool TryParseOnNonSuccess { get; set; }
+
+        /// <summary>
         /// Connection id
         /// </summary>
         public int? ConnectionId { get; set; }
@@ -76,6 +81,9 @@ namespace CryptoExchange.Net.Objects
         {
             Path = path;
             Method = method;
+
+            if (!Path.StartsWith("/"))
+                Path = $"/{Path}";
         }
 
         /// <inheritdoc />

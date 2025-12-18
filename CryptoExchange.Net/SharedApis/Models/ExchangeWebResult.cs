@@ -1,9 +1,9 @@
 ﻿using CryptoExchange.Net.Objects;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Net.Http;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 
 namespace CryptoExchange.Net.SharedApis
 {
@@ -48,6 +48,7 @@ namespace CryptoExchange.Net.SharedApis
             WebCallResult<T> result,
             INextPageToken? nextPageToken = null) :
             base(result.ResponseStatusCode,
+                result.HttpVersion,
                 result.ResponseHeaders,
                 result.ResponseTime,
                 result.ResponseLength,
@@ -75,6 +76,7 @@ namespace CryptoExchange.Net.SharedApis
             WebCallResult<T> result,
             INextPageToken? nextPageToken = null) :
             base(result.ResponseStatusCode,
+                result.HttpVersion,
                 result.ResponseHeaders,
                 result.ResponseTime,
                 result.ResponseLength,
@@ -100,7 +102,8 @@ namespace CryptoExchange.Net.SharedApis
             string exchange,
             TradingMode[]? dataTradeModes,
             HttpStatusCode? code,
-            KeyValuePair<string, string[]>[]? responseHeaders,
+            Version? httpVersion,
+            HttpResponseHeaders? responseHeaders,
             TimeSpan? responseTime,
             long? responseLength,
             string? originalData,
@@ -108,12 +111,13 @@ namespace CryptoExchange.Net.SharedApis
             string? requestUrl,
             string? requestBody,
             HttpMethod? requestMethod,
-            KeyValuePair<string, string[]>[]? requestHeaders,
+            HttpRequestHeaders? requestHeaders,
             ResultDataSource dataSource,
             [AllowNull] T data,
             Error? error,
             INextPageToken? nextPageToken = null) : base(
                 code,
+                httpVersion,
                 responseHeaders,
                 responseTime,
                 responseLength,
@@ -140,7 +144,7 @@ namespace CryptoExchange.Net.SharedApis
         /// <returns></returns>
         public new ExchangeWebResult<K> As<K>([AllowNull] K data)
         {
-            return new ExchangeWebResult<K>(Exchange, DataTradeMode, ResponseStatusCode, ResponseHeaders, ResponseTime, ResponseLength, OriginalData, RequestId, RequestUrl, RequestBody, RequestMethod, RequestHeaders, DataSource, data, Error, NextPageToken);
+            return new ExchangeWebResult<K>(Exchange, DataTradeMode, ResponseStatusCode, HttpVersion, ResponseHeaders, ResponseTime, ResponseLength, OriginalData, RequestId, RequestUrl, RequestBody, RequestMethod, RequestHeaders, DataSource, data, Error, NextPageToken);
         }
 
         /// <inheritdoc />

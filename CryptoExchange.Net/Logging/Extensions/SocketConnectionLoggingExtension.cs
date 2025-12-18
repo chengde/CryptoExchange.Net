@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net.WebSockets;
+using CryptoExchange.Net.Sockets.Default;
 using Microsoft.Extensions.Logging;
 
 namespace CryptoExchange.Net.Logging.Extensions
@@ -8,16 +9,16 @@ namespace CryptoExchange.Net.Logging.Extensions
     public static class SocketConnectionLoggingExtension
     {
         private static readonly Action<ILogger, int, bool, Exception?> _activityPaused;
-        private static readonly Action<ILogger, int, Sockets.SocketConnection.SocketStatus, Sockets.SocketConnection.SocketStatus, Exception?> _socketStatusChanged;
+        private static readonly Action<ILogger, int, SocketStatus, SocketStatus, Exception?> _socketStatusChanged;
         private static readonly Action<ILogger, int, string?, Exception?> _failedReconnectProcessing;
         private static readonly Action<ILogger, int, Exception?> _unknownExceptionWhileProcessingReconnection;
         private static readonly Action<ILogger, int, WebSocketError, string?, Exception?> _webSocketErrorCodeAndDetails;
         private static readonly Action<ILogger, int, string?, Exception?> _webSocketError;
-        private static readonly Action<ILogger, int, int, Exception?> _messageSentNotPending;
         private static readonly Action<ILogger, int, string, Exception?> _receivedData;
+        private static readonly Action<ILogger, int, string, Exception?> _failedToParse;
         private static readonly Action<ILogger, int, string, Exception?> _failedToEvaluateMessage;
         private static readonly Action<ILogger, int, Exception?> _errorProcessingMessage;
-        private static readonly Action<ILogger, int, int, string, Exception?> _processorMatched;
+        private static readonly Action<ILogger, int, string, string, Exception?> _processorMatched;
         private static readonly Action<ILogger, int, int, Exception?> _receivedMessageNotRecognized;
         private static readonly Action<ILogger, int, string?, Exception?> _failedToDeserializeMessage;
         private static readonly Action<ILogger, int, string, Exception?> _userMessageProcessingFailed;
@@ -37,6 +38,7 @@ namespace CryptoExchange.Net.Logging.Extensions
         private static readonly Action<ILogger, int, string, string, Exception?> _periodicSendFailed;
         private static readonly Action<ILogger, int, int, string, Exception?> _sendingData;
         private static readonly Action<ILogger, int, string, string, Exception?> _receivedMessageNotMatchedToAnyListener;
+        private static readonly Action<ILogger, int, int, int, Exception?> _sendingByteData;
 
         static SocketConnectionLoggingExtension()
         {
@@ -45,7 +47,7 @@ namespace CryptoExchange.Net.Logging.Extensions
                 new EventId(2000, "ActivityPaused"),
                 "[Sckt {SocketId}] paused activity: {Paused}");
 
-            _socketStatusChanged = LoggerMessage.Define<int, Sockets.SocketConnection.SocketStatus, Sockets.SocketConnection.SocketStatus>(
+            _socketStatusChanged = LoggerMessage.Define<int, SocketStatus, SocketStatus>(
                 LogLevel.Debug,
                 new EventId(2001, "SocketStatusChanged"),
                 "[Sckt {SocketId}] status changed from {OldStatus} to {NewStatus}");
@@ -70,11 +72,6 @@ namespace CryptoExchange.Net.Logging.Extensions
                 new EventId(2005, "WebSocketError"),
                 "[Sckt {SocketId}] error: {ErrorMessage}");
 
-            _messageSentNotPending = LoggerMessage.Define<int, int>(
-                LogLevel.Debug,
-                new EventId(2006, "MessageSentNotPending"),
-                "[Sckt {SocketId}] [Req {RequestId}] message sent, but not pending");
-
             _receivedData = LoggerMessage.Define<int, string>(
                 LogLevel.Trace,
                 new EventId(2007, "ReceivedData"),
@@ -89,11 +86,6 @@ namespace CryptoExchange.Net.Logging.Extensions
                 LogLevel.Error,
                 new EventId(2009, "ErrorProcessingMessage"),
                 "[Sckt {SocketId}] error processing message");
-
-            _processorMatched = LoggerMessage.Define<int, int, string>(
-                LogLevel.Trace,
-                new EventId(2010, "ProcessorMatched"),
-                "[Sckt {SocketId}] {Count} processor(s) matched to message with listener identifier {ListenerId}");
 
             _receivedMessageNotRecognized = LoggerMessage.Define<int, int>(
                 LogLevel.Warning,
@@ -188,7 +180,23 @@ namespace CryptoExchange.Net.Logging.Extensions
             _receivedMessageNotMatchedToAnyListener = LoggerMessage.Define<int, string, string>(
                 LogLevel.Warning,
                 new EventId(2029, "ReceivedMessageNotMatchedToAnyListener"),
-                "[Sckt {SocketId}] received message not matched to any listener. ListenId: {ListenId}, current listeners: {ListenIds}");
+                "[Sckt {SocketId}] received message not matched to any listener. ListenId: {ListenId}, current listeners: [{ListenIds}]");
+
+            _failedToParse = LoggerMessage.Define<int, string>(
+                LogLevel.Warning,
+                new EventId(2030, "FailedToParse"),
+                "[Sckt {SocketId}] failed to parse data: {Error}");
+
+            _sendingByteData = LoggerMessage.Define<int, int, int>(
+                LogLevel.Trace,
+                new EventId(2031, "SendingByteData"),
+                "[Sckt {SocketId}] [Req {RequestId}] sending byte message of length: {Length}");
+
+            _processorMatched = LoggerMessage.Define<int, string, string>(
+                LogLevel.Trace,
+                new EventId(2032, "ProcessorMatched"),
+                "[Sckt {SocketId}] listener '{ListenId}' matched to message with listener identifier {ListenerId}");
+
         }
 
         public static void ActivityPaused(this ILogger logger, int socketId, bool paused)
@@ -196,7 +204,7 @@ namespace CryptoExchange.Net.Logging.Extensions
             _activityPaused(logger, socketId, paused, null);
         }
 
-        public static void SocketStatusChanged(this ILogger logger, int socketId, Sockets.SocketConnection.SocketStatus oldStatus, Sockets.SocketConnection.SocketStatus newStatus)
+        public static void SocketStatusChanged(this ILogger logger, int socketId, SocketStatus oldStatus, SocketStatus newStatus)
         {
             _socketStatusChanged(logger, socketId, oldStatus, newStatus, null);
         }
@@ -221,15 +229,16 @@ namespace CryptoExchange.Net.Logging.Extensions
             _webSocketError(logger, socketId, errorMessage, e);
         }
 
-        public static void MessageSentNotPending(this ILogger logger, int socketId, int requestId)
-        {
-            _messageSentNotPending(logger, socketId, requestId, null);
-        }
-
         public static void ReceivedData(this ILogger logger, int socketId, string originalData)
         {
             _receivedData(logger, socketId, originalData, null);
         }
+
+        public static void FailedToParse(this ILogger logger, int socketId, string error)
+        {
+            _failedToParse(logger, socketId, error, null);
+        }
+
         public static void FailedToEvaluateMessage(this ILogger logger, int socketId, string originalData)
         {
             _failedToEvaluateMessage(logger, socketId, originalData, null);
@@ -238,9 +247,9 @@ namespace CryptoExchange.Net.Logging.Extensions
         {
             _errorProcessingMessage(logger, socketId, e);
         }
-        public static void ProcessorMatched(this ILogger logger, int socketId, int count, string listenerId)
+        public static void ProcessorMatched(this ILogger logger, int socketId, string listener, string listenerId)
         {
-            _processorMatched(logger, socketId, count, listenerId, null);
+            _processorMatched(logger, socketId, listener, listenerId, null);
         }
         public static void ReceivedMessageNotRecognized(this ILogger logger, int socketId, int id)
         {
@@ -320,6 +329,11 @@ namespace CryptoExchange.Net.Logging.Extensions
         public static void ReceivedMessageNotMatchedToAnyListener(this ILogger logger, int socketId, string listenId, string listenIds)
         {
             _receivedMessageNotMatchedToAnyListener(logger, socketId, listenId, listenIds, null);
+        }
+
+        public static void SendingByteData(this ILogger logger, int socketId, int requestId, int length)
+        {
+            _sendingByteData(logger, socketId, requestId, length, null);
         }
     }
 }

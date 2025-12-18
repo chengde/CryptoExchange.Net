@@ -1,9 +1,9 @@
 ﻿using CryptoExchange.Net.Authentication;
 using CryptoExchange.Net.Objects.Options;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace CryptoExchange.Net.Clients
 {
@@ -49,7 +49,11 @@ namespace CryptoExchange.Net.Clients
         /// </summary>
         protected internal ILogger _logger;
 
+#if NET9_0_OR_GREATER
+        private readonly Lock _versionLock = new Lock();
+#else
         private readonly object _versionLock = new object();
+#endif
         private Version _exchangeVersion;
 
         /// <summary>
@@ -102,7 +106,6 @@ namespace CryptoExchange.Net.Clients
             if (ClientOptions == null)
                 throw new InvalidOperationException("Client should have called Initialize before adding API clients");
 
-            _logger.Log(LogLevel.Trace, $"  {apiClient.GetType().Name}, base address: {apiClient.BaseAddress}");
             ApiClients.Add(apiClient);
             return apiClient;
         }
@@ -122,7 +125,6 @@ namespace CryptoExchange.Net.Clients
         /// </summary>
         public virtual void Dispose()
         {
-            _logger.Log(LogLevel.Debug, "Disposing client");
             foreach (var client in ApiClients)
                 client.Dispose();
         }

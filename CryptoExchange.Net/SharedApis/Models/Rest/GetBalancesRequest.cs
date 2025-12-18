@@ -1,6 +1,4 @@
-﻿using CryptoExchange.Net.Objects;
-
-namespace CryptoExchange.Net.SharedApis
+﻿namespace CryptoExchange.Net.SharedApis
 {
     /// <summary>
     /// Request to retrieve balance info for the user
@@ -8,18 +6,28 @@ namespace CryptoExchange.Net.SharedApis
     public record GetBalancesRequest : SharedRequest
     {
         /// <summary>
-        /// Trading mode
+        /// Account type
         /// </summary>
-        public TradingMode? TradingMode { get; set; }
+        public SharedAccountType? AccountType { get; set; }
 
         /// <summary>
         /// ctor
         /// </summary>
         /// <param name="tradingMode">Trading mode</param>
         /// <param name="exchangeParameters">Exchange specific parameters</param>
-        public GetBalancesRequest(TradingMode? tradingMode = null, ExchangeParameters? exchangeParameters = null) : base(exchangeParameters)
+        public GetBalancesRequest(TradingMode tradingMode, ExchangeParameters? exchangeParameters = null) : base(exchangeParameters)
         {
-            TradingMode = tradingMode;
+            AccountType = tradingMode.ToAccountType();
+        }
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        /// <param name="accountType">Account type</param>
+        /// <param name="exchangeParameters">Exchange specific parameters</param>
+        public GetBalancesRequest(SharedAccountType? accountType = null, ExchangeParameters? exchangeParameters = null) : base(exchangeParameters)
+        {
+            AccountType = accountType;
         }
     }
 }

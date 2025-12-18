@@ -24,8 +24,8 @@ namespace CryptoExchange.Net.SharedApis
         /// <inheritdoc />
         public override Error? ValidateRequest(string exchange, GetDepositsRequest request, TradingMode? tradingMode, TradingMode[] supportedApiTypes)
         {
-            if (TimeFilterSupported && request.StartTime != null)
-                return new ArgumentError($"Time filter is not supported");
+            if (!TimeFilterSupported && request.StartTime != null)
+                return ArgumentError.Invalid(nameof(GetDepositsRequest.StartTime), $"Time filter is not supported");
 
             return base.ValidateRequest(exchange, request, tradingMode, supportedApiTypes);
         }

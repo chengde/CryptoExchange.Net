@@ -1,15 +1,19 @@
 ﻿@page "/OrderBooks"
 @using System.Collections.Concurrent
 @using System.Timers
+@using Aster.Net.Interfaces
 @using Binance.Net.Interfaces
 @using BingX.Net.Interfaces
 @using Bitfinex.Net.Interfaces
 @using Bitget.Net.Interfaces;
 @using BitMart.Net.Interfaces;
 @using BitMEX.Net.Interfaces;
+@using BloFin.Net.Interfaces;
 @using Bybit.Net.Interfaces
 @using CoinEx.Net.Interfaces
+@using CoinW.Net.Interfaces
 @using Coinbase.Net.Interfaces
+@using CryptoExchange.Net.Authentication
 @using CryptoExchange.Net.Interfaces
 @using CryptoCom.Net.Interfaces
 @using DeepCoin.Net.Interfaces
@@ -21,16 +25,22 @@
 @using Kucoin.Net.Interfaces
 @using Mexc.Net.Interfaces
 @using OKX.Net.Interfaces;
+@using Upbit.Net.Interfaces;
+@using Toobit.Net.Interfaces;
 @using WhiteBit.Net.Interfaces
+@using XT.Net.Interfaces
+@inject IAsterOrderBookFactory asterFactory
 @inject IBinanceOrderBookFactory binanceFactory
 @inject IBingXOrderBookFactory bingXFactory
 @inject IBitfinexOrderBookFactory bitfinexFactory
 @inject IBitgetOrderBookFactory bitgetFactory
 @inject IBitMartOrderBookFactory bitmartFactory
 @inject IBitMEXOrderBookFactory bitmexFactory
+@inject IBloFinOrderBookFactory bloFinFactory
 @inject IBybitOrderBookFactory bybitFactory
 @inject ICoinbaseOrderBookFactory coinbaseFactory
 @inject ICoinExOrderBookFactory coinExFactory
+@inject ICoinWOrderBookFactory coinWFactory
 @inject ICryptoComOrderBookFactory cryptocomFactory
 @inject IDeepCoinOrderBookFactory deepCoinFactory
 @inject IGateIoOrderBookFactory gateioFactory
@@ -40,7 +50,10 @@
 @inject IKucoinOrderBookFactory kucoinFactory
 @inject IMexcOrderBookFactory mexcFactory
 @inject IOKXOrderBookFactory okxFactory
+@inject IToobitOrderBookFactory toobitFactory
+@inject IUpbitOrderBookFactory upbitFactory
 @inject IWhiteBitOrderBookFactory whitebitFactory
+@inject IXTOrderBookFactory xtFactory
 @implements IDisposable
 
 <h3>ETH-BTC books, live updates:</h3>
@@ -48,7 +61,7 @@
     @foreach(var book in _books.OrderBy(p => p.Key))
     {
         <div style="margin-bottom: 20px; flex: 1; min-width: 300px;">
-            <h4>@book.Key</h4>
+            <h4>@book.Key - @book.Value.Symbol</h4>
             @if (book.Value.AskCount >= 3 && book.Value.BidCount >= 3)
             {
                 for (var i = 0; i < 3; i++)
@@ -69,34 +82,39 @@
         // Since the Kucoin order book stream needs authentication we will need to provide API credentials beforehand
         KucoinRestClient.SetDefaultOptions(options =>
         {
-            options.ApiCredentials = new Kucoin.Net.Objects.KucoinApiCredentials("KEY", "SECRET", "PASSPHRASE");
+            options.ApiCredentials = new ApiCredentials("KEY", "SECRET", "PASSPHRASE");
         });
 
         _books = new Dictionary<string, ISymbolOrderBook>
             {
+                { "Aster", binanceFactory.CreateSpot("ETHUSDT") },
                 { "Binance", binanceFactory.CreateSpot("ETHBTC") },
                 { "BingX", bingXFactory.CreateSpot("ETH-BTC") },
                 { "Bitfinex", bitfinexFactory.Create("tETHBTC") },
                 { "Bitget", bitgetFactory.CreateSpot("ETHBTC") },
                 { "BitMart", bitmartFactory.CreateSpot("ETH_BTC", null) },
                 { "BitMEX", bitmexFactory.Create("ETH_XBT") },
+                { "BloFin", bloFinFactory.CreateFutures("ETH-USDT") },
                 { "Bybit", bybitFactory.Create("ETHBTC", Bybit.Net.Enums.Category.Spot) },
                 { "Coinbase", coinbaseFactory.Create("ETH-BTC", null) },
                 { "CoinEx", coinExFactory.CreateSpot("ETHBTC") },
+                { "CoinW", coinWFactory.CreateSpot("ETH_BTC") },
                 { "CryptoCom", cryptocomFactory.Create("ETH_BTC") },
                 { "GateIo", gateioFactory.CreateSpot("ETH_BTC") },
-                { "DeepCoin", deepCoinFactory.Create("ETH-BTC") },
+                { "DeepCoin", deepCoinFactory.Create("ETH-USDT") },
                 { "HTX", htxFactory.CreateSpot("ethbtc") },
-                // HyperLiquid does not support the ETH/BTC pair
-                //{ "HyperLiquid", hyperLiquidFactory.Create("ETH/BTC") },
+                { "HyperLiquid", hyperLiquidFactory.Create("UETH/USDC") },
                 { "Kraken", krakenFactory.CreateSpot("ETH/BTC") },
                 { "Kucoin", kucoinFactory.CreateSpot("ETH-BTC") },
                 { "Mexc", mexcFactory.CreateSpot("ETHBTC") },
                 { "OKX", okxFactory.Create("ETH-BTC") },
+                { "Toobit", toobitFactory.CreateSpot("ETHUSDT") },
+                { "Upbit", upbitFactory.CreateSpot("BTC-ETH") },
                 { "WhiteBit", whitebitFactory.CreateV4("ETH_BTC") },
+                { "XT", xtFactory.CreateSpot("eth_btc") },
             };
 
-        await Task.WhenAll(_books.Select(b => b.Value.StartAsync()));
+        var result = await Task.WhenAll(_books.Select(b => b.Value.StartAsync()));
 
         // Use a manual update timer so the page isn't refreshed too often
         _timer = new Timer(500);
@@ -106,7 +124,7 @@
 
     public void Dispose()
     {
-        _timer.Stop();
+        _timer?.Stop();
         _timer.Dispose();
         foreach (var book in _books.Where(b => b.Value.Status != CryptoExchange.Net.Objects.OrderBookStatus.Disconnected))
             // It's not necessary to wait for this

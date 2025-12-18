@@ -1,13 +1,11 @@
 ﻿using CryptoExchange.Net.Interfaces;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace CryptoExchange.Net.Converters.SystemTextJson
 {
     /// <inheritdoc />
-    public class SystemTextJsonMessageSerializer : IMessageSerializer
+    public class SystemTextJsonMessageSerializer : IStringMessageSerializer
     {
         private readonly JsonSerializerOptions _options;
 

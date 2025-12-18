@@ -1,6 +1,4 @@
-﻿using CryptoExchange.Net.Attributes;
-
-namespace CryptoExchange.Net.Objects
+﻿namespace CryptoExchange.Net.Objects
 {
     /// <summary>
     /// What to do when a request would exceed the rate limit
@@ -250,5 +248,60 @@ namespace CryptoExchange.Net.Objects
         /// Decentralized
         /// </summary>
         DEX
+    }
+
+    /// <summary>
+    /// Timeout behavior for queries
+    /// </summary>
+    public enum TimeoutBehavior
+    {
+        /// <summary>
+        /// Fail the request
+        /// </summary>
+        Fail,
+        /// <summary>
+        /// Mark the query as successful
+        /// </summary>
+        Succeed
+    }
+
+    /// <summary>
+    /// Subscription status
+    /// </summary>
+    public enum SubscriptionStatus
+    {
+        /// <summary>
+        /// Pending, waiting before (re)subscription can be started
+        /// </summary>
+        Pending,
+        /// <summary>
+        /// Currently (re)subscribing, will start producing updates soon if subscription is successful
+        /// </summary>
+        Subscribing,
+        /// <summary>
+        /// Subscribed and listening to updates
+        /// </summary>
+        Subscribed,
+        /// <summary>
+        /// Subscription is being closed and will stop producing updates
+        /// </summary>
+        Closing,
+        /// <summary>
+        /// Subscription is closed and will no long produce updates
+        /// </summary>
+        Closed
+    }
+
+    /// <summary>
+    /// Queue full behavior
+    /// </summary>
+    public enum QueueFullBehavior
+    {
+        /// <summary>Remove and ignore the newest item in the queue in order to make room for the item being written.</summary>
+        DropNewest,
+        /// <summary>Remove and ignore the oldest item in the queue in order to make room for the item being written.</summary>
+        DropOldest,
+        /// <summary>Drop the item being written.</summary>
+        DropWrite
     }
 }

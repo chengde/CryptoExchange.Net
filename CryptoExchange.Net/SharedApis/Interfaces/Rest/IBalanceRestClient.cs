@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 
 namespace CryptoExchange.Net.SharedApis
@@ -12,7 +11,7 @@ namespace CryptoExchange.Net.SharedApis
         /// <summary>
         /// Balances request options
         /// </summary>
-        EndpointOptions<GetBalancesRequest> GetBalancesOptions { get; }
+        GetBalancesOptions GetBalancesOptions { get; }
 
         /// <summary>
         /// Get balances for the user

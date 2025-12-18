@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using System.Threading;
 using NUnit.Framework.Legacy;
 using CryptoExchange.Net.RateLimiting;
-using System.Net;
 using CryptoExchange.Net.RateLimiting.Guards;
 using CryptoExchange.Net.RateLimiting.Filters;
 using CryptoExchange.Net.RateLimiting.Interfaces;
@@ -96,7 +95,7 @@ namespace CryptoExchange.Net.UnitTests
             ClassicAssert.IsFalse(result.Success);
             Assert.That(result.Error != null);
             Assert.That(result.Error is ServerError);
-            Assert.That(result.Error.Code == 123);
+            Assert.That(result.Error.ErrorCode == "123");
             Assert.That(result.Error.Message == "Invalid request");
         }
 
@@ -182,7 +181,7 @@ namespace CryptoExchange.Net.UnitTests
         [TestCase("/sapi/test1", true)]
         [TestCase("/sapi/test2", true)]
         [TestCase("/api/test1", false)]
-        [TestCase("sapi/test1", false)]
+        [TestCase("sapi/test1", true)]
         [TestCase("/sapi/", true)]
         public async Task PartialEndpointRateLimiterEndpoints(string endpoint, bool expectLimiting)
         {

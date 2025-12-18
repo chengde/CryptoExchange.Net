@@ -15,6 +15,11 @@ using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Objects.Sockets;
 using CryptoExchange.Net.Testing.Implementations;
 
+#pragma warning disable IL2026
+#pragma warning disable IL2070
+#pragma warning disable IL2075
+#pragma warning disable IL3050
+
 namespace CryptoExchange.Net.Testing
 {
     /// <summary>
@@ -58,7 +63,7 @@ namespace CryptoExchange.Net.Testing
 
         internal static TestSocket ConfigureSocketClient<T>(T client, string address) where T : BaseSocketClient
         {
-            var socket = new TestSocket(address);
+            var socket = new TestSocket(client.ClientOptions.UseUpdatedDeserialization, address);
             foreach (var apiClient in client.ApiClients.OfType<SocketApiClient>())
             {
                 apiClient.SocketFactory = new TestWebsocketFactory(socket);
@@ -123,23 +128,27 @@ namespace CryptoExchange.Net.Testing
             var uriParams = client.ParameterPositions[method] == HttpMethodParameterPosition.InUri ? client.CreateParameterDictionary(parameters) : null;
             var bodyParams = client.ParameterPositions[method] == HttpMethodParameterPosition.InBody ? client.CreateParameterDictionary(parameters) : null;
 
-            var headers = new Dictionary<string, string>();
+            var requestDefinition = new RestRequestConfiguration(
+                    new RequestDefinition(path, method)
+                    {
+                        Authenticated = true
+                    },
+                    host,
+                    uriParams ?? new Dictionary<string, object>(),
+                    bodyParams ?? new Dictionary<string, object>(),
+                    new Dictionary<string, string>(),
+                    client.ArraySerialization,
+                    client.ParameterPositions[method],
+                    client.RequestBodyFormat
+                    );
 
             authProvider.TimeProvider = new TestAuthTimeProvider(time ?? new DateTime(2024, 01, 01, 0, 0, 0, DateTimeKind.Utc));
-            authProvider.AuthenticateRequest(
-                client, 
-                new Uri(host.AppendPath(path)), 
-                method,
-                ref uriParams,
-                ref bodyParams,
-                ref headers,
-                true,
-                client.ArraySerialization, 
-                client.ParameterPositions[method],
-                client.RequestBodyFormat
+            authProvider.ProcessRequest(
+                client,
+                requestDefinition
                 );
 
-            var signature = getSignature(uriParams, bodyParams, headers);
+            var signature = getSignature(requestDefinition.QueryParameters, requestDefinition.BodyParameters, requestDefinition.Headers);
 
             if (!string.Equals(signature, expectedSignature, compareCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
                 throw new Exception($"Signatures do not match. Expected: {expectedSignature}, Actual: {signature}");

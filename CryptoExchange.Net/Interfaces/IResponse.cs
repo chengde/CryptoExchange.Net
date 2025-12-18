@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
 using System.IO;
 using System.Net;
+using System.Net.Http.Headers;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace CryptoExchange.Net.Interfaces
@@ -16,6 +18,11 @@ namespace CryptoExchange.Net.Interfaces
         HttpStatusCode StatusCode { get; }
 
         /// <summary>
+        /// Http protocol version
+        /// </summary>
+        Version HttpVersion { get; }
+
+        /// <summary>
         /// Whether the status code indicates a success status
         /// </summary>
         bool IsSuccessStatusCode { get; }
@@ -28,13 +35,13 @@ namespace CryptoExchange.Net.Interfaces
         /// <summary>
         /// The response headers
         /// </summary>
-        KeyValuePair<string, string[]>[] ResponseHeaders { get; }
+        HttpResponseHeaders ResponseHeaders { get; }
 
         /// <summary>
         /// Get the response stream
         /// </summary>
         /// <returns></returns>
-        Task<Stream> GetResponseStreamAsync();
+        Task<Stream> GetResponseStreamAsync(CancellationToken cancellationToken);
 
         /// <summary>
         /// Close the response

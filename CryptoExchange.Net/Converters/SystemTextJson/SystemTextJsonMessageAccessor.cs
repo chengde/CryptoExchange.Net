@@ -2,7 +2,6 @@
 using CryptoExchange.Net.Interfaces;
 using CryptoExchange.Net.Objects;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text;
@@ -24,7 +23,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
         private readonly JsonSerializerOptions? _customSerializerOptions;
 
         /// <inheritdoc />
-        public bool IsJson { get; set; }
+        public bool IsValid { get; set; }
 
         /// <inheritdoc />
         public abstract bool OriginalDataAvailable { get; }
@@ -47,7 +46,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 #endif
         public CallResult<object> Deserialize(Type type, MessagePath? path = null)
         {
-            if (!IsJson)
+            if (!IsValid)
                 return new CallResult<object>(GetOriginalString());
 
             if (_document == null)
@@ -60,13 +59,12 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
             }
             catch (JsonException ex)
             {
-                var info = $"Deserialize JsonException: {ex.Message}, Path: {ex.Path}, LineNumber: {ex.LineNumber}, LinePosition: {ex.BytePositionInLine}";
+                var info = $"Json deserialization failed: {ex.Message}, Path: {ex.Path}, LineNumber: {ex.LineNumber}, LinePosition: {ex.BytePositionInLine}";
                 return new CallResult<object>(new DeserializeError(info, ex));
             }
             catch (Exception ex)
             {
-                var info = $"Deserialize unknown Exception: {ex.Message}";
-                return new CallResult<object>(new DeserializeError(info, ex));
+                return new CallResult<object>(new DeserializeError($"Json deserialization failed: {ex.Message}", ex));
             }
         }
 
@@ -87,20 +85,19 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
             }
             catch (JsonException ex)
             {
-                var info = $"Deserialize JsonException: {ex.Message}, Path: {ex.Path}, LineNumber: {ex.LineNumber}, LinePosition: {ex.BytePositionInLine}";
+                var info = $"Json deserialization failed: {ex.Message}, Path: {ex.Path}, LineNumber: {ex.LineNumber}, LinePosition: {ex.BytePositionInLine}";
                 return new CallResult<T>(new DeserializeError(info, ex));
             }
             catch (Exception ex)
             {
-                var info = $"Unknown exception: {ex.Message}";
-                return new CallResult<T>(new DeserializeError(info, ex));
+                return new CallResult<T>(new DeserializeError($"Json deserialization failed: {ex.Message}", ex));
             }
         }
 
         /// <inheritdoc />
         public NodeType? GetNodeType()
         {
-            if (!IsJson)
+            if (!IsValid)
                 throw new InvalidOperationException("Can't access json data on non-json message");
 
             if (_document == null)
@@ -117,7 +114,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
         /// <inheritdoc />
         public NodeType? GetNodeType(MessagePath path)
         {
-            if (!IsJson)
+            if (!IsValid)
                 throw new InvalidOperationException("Can't access json data on non-json message");
 
             var node = GetPathNode(path);
@@ -139,7 +136,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 #endif
         public T? GetValue<T>(MessagePath path)
         {
-            if (!IsJson)
+            if (!IsValid)
                 throw new InvalidOperationException("Can't access json data on non-json message");
 
             var value = GetPathNode(path);
@@ -173,7 +170,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 #endif
         public T?[]? GetValues<T>(MessagePath path)
         {
-            if (!IsJson)
+            if (!IsValid)
                 throw new InvalidOperationException("Can't access json data on non-json message");
 
             var value = GetPathNode(path);
@@ -188,7 +185,7 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 
         private JsonElement? GetPathNode(MessagePath path)
         {
-            if (!IsJson)
+            if (!IsValid)
                 throw new InvalidOperationException("Can't access json data on non-json message");
 
             if (_document == null)
@@ -279,14 +276,14 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
             try
             {
                 _document = await JsonDocument.ParseAsync(_stream ?? stream).ConfigureAwait(false);
-                IsJson = true;
+                IsValid = true;
                 return CallResult.SuccessResult;
             }
             catch (Exception ex)
             {
                 // Not a json message
-                IsJson = false;
-                return new CallResult(new DeserializeError("JsonError: " + ex.Message, ex));
+                IsValid = false;
+                return new CallResult(new DeserializeError($"Json deserialization failed: {ex.Message}", ex));
             }
         }
 
@@ -337,19 +334,19 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                 if (firstByte != 0x7b && firstByte != 0x5b)
                 {
                     // Value doesn't start with `{` or `[`, prevent deserialization attempt as it's slow
-                    IsJson = false;
-                    return new CallResult(new ServerError("Not a json value"));
+                    IsValid = false;
+                    return new CallResult(new DeserializeError("Not a json value"));
                 }
 
                 _document = JsonDocument.Parse(data);
-                IsJson = true;
+                IsValid = true;
                 return CallResult.SuccessResult;
             }
             catch (Exception ex)
             {
                 // Not a json message
-                IsJson = false;
-                return new CallResult(new DeserializeError("JsonError: " + ex.Message, ex));
+                IsValid = false;
+                return new CallResult(new DeserializeError($"Json deserialization failed: {ex.Message}", ex));
             }
         }
 

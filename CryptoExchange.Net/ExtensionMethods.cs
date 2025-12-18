@@ -1,18 +1,15 @@
-﻿using System;
+﻿using CryptoExchange.Net.Objects;
+using CryptoExchange.Net.SharedApis;
+using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
-using System.IO.Compression;
+using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Web;
-using CryptoExchange.Net.Objects;
-using System.Globalization;
-using Microsoft.Extensions.DependencyInjection;
-using CryptoExchange.Net.SharedApis;
-using System.Text.Json.Serialization.Metadata;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace CryptoExchange.Net
 {
@@ -64,30 +61,71 @@ namespace CryptoExchange.Net
         /// <returns></returns>
         public static string CreateParamString(this IDictionary<string, object> parameters, bool urlEncodeValues, ArrayParametersSerialization serializationType)
         {
-            var uriString = string.Empty;
-            var arraysParameters = parameters.Where(p => p.Value.GetType().IsArray).ToList();
-            foreach (var arrayEntry in arraysParameters)
+            var uriString = new StringBuilder();
+            bool first = true;
+            foreach(var parameter in parameters)
             {
-                if (serializationType == ArrayParametersSerialization.Array)
+                if (!first)
+                    uriString.Append("&");
+
+                first = false;
+
+                if (parameter.GetType().IsArray)
                 {
-                    uriString += $"{string.Join("&", ((object[])(urlEncodeValues ? Uri.EscapeDataString(arrayEntry.Value.ToString()!) : arrayEntry.Value)).Select(v => $"{arrayEntry.Key}[]={string.Format(CultureInfo.InvariantCulture, "{0}", v)}"))}&";
+                    if (serializationType == ArrayParametersSerialization.Array)
+                    {
+                        foreach(var entry in (object[])parameter.Value)
+                        {
+                            uriString.Append(parameter.Key);
+                            uriString.Append("[]=");
+                            if (urlEncodeValues)
+                                uriString.Append(Uri.EscapeDataString(string.Format(CultureInfo.InvariantCulture, "{0}", entry)));
+                            else
+                                uriString.Append(string.Format(CultureInfo.InvariantCulture, "{0}", entry));
+                        }
+                    }
+                    else if (serializationType == ArrayParametersSerialization.MultipleValues)
+                    {
+                        foreach (var entry in (object[])parameter.Value)
+                        {
+                            uriString.Append(parameter.Key);
+                            uriString.Append("=");
+                            if (urlEncodeValues)
+                                uriString.Append(Uri.EscapeDataString(string.Format(CultureInfo.InvariantCulture, "{0}", entry)));
+                            else
+                                uriString.Append(string.Format(CultureInfo.InvariantCulture, "{0}", entry));
+                        }
+                    }
+                    else
+                    {
+                        uriString.Append('[');
+                        var firstArrayEntry = true;
+                        foreach (var entry in (object[])parameter.Value)
+                        {
+                            if (!firstArrayEntry)
+                                uriString.Append(',');                            
+
+                            firstArrayEntry = false;
+                            if (urlEncodeValues)
+                                uriString.Append(Uri.EscapeDataString(string.Format(CultureInfo.InvariantCulture, "{0}", entry)));
+                            else
+                                uriString.Append(string.Format(CultureInfo.InvariantCulture, "{0}", entry));
+                        }
+                        uriString.Append(']');
+                    }
                 }
-                else if (serializationType == ArrayParametersSerialization.MultipleValues)
+                else 
                 {
-                    var array = (Array)arrayEntry.Value;
-                    uriString += string.Join("&", array.OfType<object>().Select(a => $"{arrayEntry.Key}={Uri.EscapeDataString(string.Format(CultureInfo.InvariantCulture, "{0}", a))}"));
-                    uriString += "&";
-                }
-                else
-                {
-                    var array = (Array)arrayEntry.Value;
-                    uriString += $"{arrayEntry.Key}=[{string.Join(",", array.OfType<object>().Select(a => string.Format(CultureInfo.InvariantCulture, "{0}", a)))}]&";
+                    uriString.Append(parameter.Key);
+                    uriString.Append('=');
+                    if (urlEncodeValues)
+                        uriString.Append(Uri.EscapeDataString(string.Format(CultureInfo.InvariantCulture, "{0}", parameter.Value)));
+                    else
+                        uriString.Append(string.Format(CultureInfo.InvariantCulture, "{0}", parameter.Value));
                 }
             }
 
-            uriString += $"{string.Join("&", parameters.Where(p => !p.Value.GetType().IsArray).Select(s => $"{s.Key}={(urlEncodeValues ? Uri.EscapeDataString(string.Format(CultureInfo.InvariantCulture, "{0}", s.Value)) : string.Format(CultureInfo.InvariantCulture, "{0}", s.Value))}"))}";
-            uriString = uriString.TrimEnd('&');
-            return uriString;
+            return uriString.ToString();
         }
 
         /// <summary>
@@ -233,18 +271,16 @@ namespace CryptoExchange.Net
         /// <summary>
         /// Append a base url with provided path
         /// </summary>
-        /// <param name="url"></param>
-        /// <param name="path"></param>
-        /// <returns></returns>
         public static string AppendPath(this string url, params string[] path)
         {
-            if (!url.EndsWith("/"))
-                url += "/";
+            var sb = new StringBuilder(url.TrimEnd('/'));
+            foreach (var subPath in path)
+            {
+                sb.Append('/');
+                sb.Append(subPath.Trim('/'));
+            }
 
-            foreach (var item in path)
-                url += item.Trim('/') + "/";
-
-            return url.TrimEnd('/');
+            return sb.ToString();
         }
 
         /// <summary>
@@ -366,17 +402,38 @@ namespace CryptoExchange.Net
         /// <summary>
         /// Decompress using GzipStream
         /// </summary>
-        /// <param name="data"></param>
-        /// <returns></returns>
+        public static ReadOnlySpan<byte> DecompressGzip(this ReadOnlySpan<byte> data)
+        {
+            using var decompressedStream = new MemoryStream();
+            using var deflateStream = new GZipStream(new MemoryStream(data.ToArray()), CompressionMode.Decompress);
+            deflateStream.CopyTo(decompressedStream);
+            return new ReadOnlySpan<byte>(decompressedStream.GetBuffer(), 0, (int)decompressedStream.Length);
+        }
+
+        /// <summary>
+        /// Decompress using GzipStream
+        /// </summary>
         public static ReadOnlyMemory<byte> DecompressGzip(this ReadOnlyMemory<byte> data)
         {
             using var decompressedStream = new MemoryStream();
             using var dataStream = MemoryMarshal.TryGetArray(data, out var arraySegment)
                 ? new MemoryStream(arraySegment.Array!, arraySegment.Offset, arraySegment.Count)
                 : new MemoryStream(data.ToArray());
-            using var deflateStream = new GZipStream(new MemoryStream(data.ToArray()), CompressionMode.Decompress);
+            using var deflateStream = new GZipStream(dataStream, CompressionMode.Decompress);
             deflateStream.CopyTo(decompressedStream);
             return new ReadOnlyMemory<byte>(decompressedStream.GetBuffer(), 0, (int)decompressedStream.Length);
+        }
+
+        /// <summary>
+        /// Decompress using GzipStream
+        /// </summary>
+        public static ReadOnlySpan<byte> Decompress(this ReadOnlySpan<byte> input)
+        {
+            using var output = new MemoryStream();
+            using var compressStream = new MemoryStream(input.ToArray());
+            using var decompressor = new DeflateStream(compressStream, CompressionMode.Decompress);
+            decompressor.CopyTo(output);
+            return new ReadOnlySpan<byte>(output.GetBuffer(), 0, (int)output.Length);
         }
 
         /// <summary>
@@ -388,10 +445,9 @@ namespace CryptoExchange.Net
         {
             var output = new MemoryStream();
 
-            using (var compressStream = new MemoryStream(input.ToArray()))
-            using (var decompressor = new DeflateStream(compressStream, CompressionMode.Decompress))
-                decompressor.CopyTo(output);
-
+            using var compressStream = new MemoryStream(input.ToArray());
+            using var decompressor = new DeflateStream(compressStream, CompressionMode.Decompress);
+            decompressor.CopyTo(output);
             output.Position = 0;
             return new ReadOnlyMemory<byte>(output.GetBuffer(), 0, (int)output.Length);
         }
@@ -399,7 +455,7 @@ namespace CryptoExchange.Net
         /// <summary>
         /// Whether the trading mode is linear
         /// </summary>
-        public static bool IsLinear(this TradingMode type) => type == TradingMode.PerpetualLinear || type == TradingMode.DeliveryLinear;
+        public static bool IsLinear(this TradingMode type) => type == TradingMode.PerpetualLinear || type == TradingMode.DeliveryLinear;        
 
         /// <summary>
         /// Whether the trading mode is inverse
@@ -415,6 +471,36 @@ namespace CryptoExchange.Net
         /// Whether the trading mode is delivery
         /// </summary>
         public static bool IsDelivery(this TradingMode type) => type == TradingMode.DeliveryInverse || type == TradingMode.DeliveryLinear;
+
+        /// <summary>
+        /// Whether the account type is a futures account
+        /// </summary>
+        public static bool IsFuturesAccount(this SharedAccountType type) =>
+            type == SharedAccountType.PerpetualLinearFutures
+            || type == SharedAccountType.DeliveryLinearFutures
+            || type == SharedAccountType.PerpetualInverseFutures
+            || type == SharedAccountType.DeliveryInverseFutures;
+
+        /// <summary>
+        /// Whether the account type is a margin account
+        /// </summary>
+        public static bool IsMarginAccount(this SharedAccountType type) =>
+            type == SharedAccountType.CrossMargin
+            || type == SharedAccountType.IsolatedMargin;
+
+        /// <summary>
+        /// Map a TradingMode value to a SharedAccountType enum value
+        /// </summary>
+        public static SharedAccountType ToAccountType(this TradingMode mode)
+        {
+            if (mode == TradingMode.Spot) return SharedAccountType.Spot;
+            if (mode == TradingMode.PerpetualLinear) return SharedAccountType.PerpetualLinearFutures;
+            if (mode == TradingMode.PerpetualInverse) return SharedAccountType.PerpetualInverseFutures;
+            if (mode == TradingMode.DeliveryInverse) return SharedAccountType.DeliveryInverseFutures;
+            if (mode == TradingMode.DeliveryLinear) return SharedAccountType.DeliveryLinearFutures;
+
+            throw new ArgumentException(nameof(mode), "Unmapped trading mode");
+        }
 
         /// <summary>
         /// Register rest client interfaces
@@ -445,6 +531,8 @@ namespace CryptoExchange.Net
                 services.AddTransient(x => (IFeeRestClient)client(x)!);
             if (typeof(IBookTickerRestClient).IsAssignableFrom(typeof(T)))
                 services.AddTransient(x => (IBookTickerRestClient)client(x)!);
+            if (typeof(ITransferRestClient).IsAssignableFrom(typeof(T)))
+                services.AddTransient(x => (ITransferRestClient)client(x)!);
 
             if (typeof(ISpotOrderRestClient).IsAssignableFrom(typeof(T)))
                 services.AddTransient(x => (ISpotOrderRestClient)client(x)!);
@@ -498,8 +586,8 @@ namespace CryptoExchange.Net
                 services.AddTransient(x => (IBookTickerSocketClient)client(x)!);
             if (typeof(IKlineSocketClient).IsAssignableFrom(typeof(T)))
                 services.AddTransient(x => (IKlineSocketClient)client(x)!);
-            if (typeof(IOrderBookRestClient).IsAssignableFrom(typeof(T)))
-                services.AddTransient(x => (IOrderBookRestClient)client(x)!);
+            if (typeof(IOrderBookSocketClient).IsAssignableFrom(typeof(T)))
+                services.AddTransient(x => (IOrderBookSocketClient)client(x)!);
             if (typeof(ITickerSocketClient).IsAssignableFrom(typeof(T)))
                 services.AddTransient(x => (ITickerSocketClient)client(x)!);
             if (typeof(ITickersSocketClient).IsAssignableFrom(typeof(T)))

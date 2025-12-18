@@ -1,18 +1,16 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Net.Http;
 using System.Text;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using CryptoExchange.Net.Authentication;
 using CryptoExchange.Net.Clients;
+using CryptoExchange.Net.Converters.MessageParsing.DynamicConverters;
 using CryptoExchange.Net.Converters.SystemTextJson;
 using CryptoExchange.Net.Interfaces;
 using CryptoExchange.Net.Objects;
+using CryptoExchange.Net.Objects.Errors;
 using CryptoExchange.Net.Objects.Options;
 using CryptoExchange.Net.SharedApis;
-using CryptoExchange.Net.UnitTests.TestImplementations;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -45,6 +43,8 @@ namespace CryptoExchange.Net.UnitTests
 
     public class TestSubClient : RestApiClient
     {
+        protected override IRestMessageHandler MessageHandler => throw new NotImplementedException();
+
         public TestSubClient(RestExchangeOptions<TestEnvironment> options, RestApiOptions apiOptions) : base(new TraceLogger(), null, "https://localhost:123", options, apiOptions)
         {
         }
@@ -55,7 +55,7 @@ namespace CryptoExchange.Net.UnitTests
             var accessor = CreateAccessor();
             var valid = accessor.Read(stream, true).Result;
             if (!valid)
-                return new CallResult<T>(new ServerError(data));
+                return new CallResult<T>(new ServerError(ErrorInfo.Unknown with { Message = data }));
             
             var deserializeResult = accessor.Deserialize<T>();
             return deserializeResult;
@@ -73,15 +73,27 @@ namespace CryptoExchange.Net.UnitTests
 
     public class TestAuthProvider : AuthenticationProvider
     {
+        public override ApiCredentialsType[] SupportedCredentialTypes => [ApiCredentialsType.Hmac];
+
         public TestAuthProvider(ApiCredentials credentials) : base(credentials)
         {
         }
 
-        public override void AuthenticateRequest(RestApiClient apiClient, Uri uri, HttpMethod method, ref IDictionary<string, object> uriParams, ref IDictionary<string, object> bodyParams, ref Dictionary<string, string> headers, bool auth, ArrayParametersSerialization arraySerialization, HttpMethodParameterPosition parameterPosition, RequestBodyFormat bodyFormat)
+        public override void ProcessRequest(RestApiClient apiClient, RestRequestConfiguration requestConfig)
         {
         }
-
+        
         public string GetKey() => _credentials.Key;
         public string GetSecret() => _credentials.Secret;
+    }
+
+    public class TestEnvironment : TradeEnvironment
+    {
+        public string TestAddress { get; }
+
+        public TestEnvironment(string name, string url) : base(name)
+        {
+            TestAddress = url;
+        }
     }
 }

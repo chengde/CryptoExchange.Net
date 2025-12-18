@@ -2,10 +2,13 @@
 using CryptoExchange.Net.Converters.SystemTextJson;
 using CryptoExchange.Net.Interfaces;
 using CryptoExchange.Net.Objects;
+#if NET8_0_OR_GREATER
+using NSec.Cryptography;
+#endif
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Globalization;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -19,6 +22,11 @@ namespace CryptoExchange.Net.Authentication
         internal IAuthTimeProvider TimeProvider { get; set; } = new AuthTimeProvider();
 
         /// <summary>
+        /// The supported credential types
+        /// </summary>
+        public abstract ApiCredentialsType[] SupportedCredentialTypes { get; }
+
+        /// <summary>
         /// Provided credentials
         /// </summary>
         protected internal readonly ApiCredentials _credentials;
@@ -27,6 +35,13 @@ namespace CryptoExchange.Net.Authentication
         /// Byte representation of the secret
         /// </summary>
         protected byte[] _sBytes;
+
+#if NET8_0_OR_GREATER
+        /// <summary>
+        /// The Ed25519 private key
+        /// </summary>
+        protected Key? Ed25519Key;
+#endif
 
         /// <summary>
         /// Get the API key of the current credentials
@@ -46,35 +61,26 @@ namespace CryptoExchange.Net.Authentication
             if (credentials.Key == null || credentials.Secret == null)
                 throw new ArgumentException("ApiKey/Secret needed");
 
+            if (!SupportedCredentialTypes.Any(x => x == credentials.CredentialType))
+                throw new ArgumentException($"Credential type {credentials.CredentialType} not supported");
+
+            if (credentials.CredentialType == ApiCredentialsType.Ed25519)
+            {
+#if !NET8_0_OR_GREATER
+                throw new ArgumentException($"Credential type Ed25519 only supported on Net8.0 or newer");
+#endif
+            }
+
             _credentials = credentials;
             _sBytes = Encoding.UTF8.GetBytes(credentials.Secret);
         }
 
         /// <summary>
-        /// Authenticate a request. Output parameters should include the providedParameters input
+        /// Authenticate a request
         /// </summary>
         /// <param name="apiClient">The Api client sending the request</param>
-        /// <param name="uri">The uri for the request</param>
-        /// <param name="method">The method of the request</param>
-        /// <param name="auth">If the requests should be authenticated</param>
-        /// <param name="arraySerialization">Array serialization type</param>
-        /// <param name="requestBodyFormat">The formatting of the request body</param>
-        /// <param name="uriParameters">Parameters that need to be in the Uri of the request. Should include the provided parameters if they should go in the uri</param>
-        /// <param name="bodyParameters">Parameters that need to be in the body of the request. Should include the provided parameters if they should go in the body</param>
-        /// <param name="headers">The headers that should be send with the request</param>
-        /// <param name="parameterPosition">The position where the providedParameters should go</param>
-        public abstract void AuthenticateRequest(
-            RestApiClient apiClient,
-            Uri uri,
-            HttpMethod method,
-            ref IDictionary<string, object>? uriParameters,
-            ref IDictionary<string, object>? bodyParameters,
-            ref Dictionary<string, string>? headers,
-            bool auth,
-            ArrayParametersSerialization arraySerialization,
-            HttpMethodParameterPosition parameterPosition,
-            RequestBodyFormat requestBodyFormat
-            );
+        /// <param name="requestConfig">The request configuration</param>
+        public abstract void ProcessRequest(RestApiClient apiClient, RestRequestConfiguration requestConfig);
 
         /// <summary>
         /// SHA256 sign the data and return the bytes
@@ -368,6 +374,36 @@ namespace CryptoExchange.Net.Authentication
             return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
         }
 
+        /// <summary>
+        /// Ed25519 sign the data 
+        /// </summary>
+        public string SignEd25519(string data, SignOutputType? outputType = null)
+            => SignEd25519(Encoding.ASCII.GetBytes(data), outputType);
+
+        /// <summary>
+        /// Ed25519 sign the data 
+        /// </summary>
+        public string SignEd25519(byte[] data, SignOutputType? outputType = null)
+        {
+#if NET8_0_OR_GREATER
+            if (Ed25519Key == null)
+            {
+                var key = _credentials.Secret!
+                        .Replace("\n", "")
+                        .Replace("-----BEGIN PRIVATE KEY-----", "")
+                        .Replace("-----END PRIVATE KEY-----", "")
+                        .Trim();
+                var keyBytes = Convert.FromBase64String(key);
+                Ed25519Key = Key.Import(SignatureAlgorithm.Ed25519, keyBytes, KeyBlobFormat.PkixPrivateKey);
+            }
+
+            var resultBytes = SignatureAlgorithm.Ed25519.Sign(Ed25519Key, data);
+            return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
+#else
+            throw new InvalidOperationException();
+#endif
+        }
+
         private RSA CreateRSA()
         {
             var rsa = RSA.Create();
@@ -465,10 +501,13 @@ namespace CryptoExchange.Net.Authentication
         /// <returns></returns>
         protected static string GetSerializedBody(IMessageSerializer serializer, IDictionary<string, object> parameters)
         {
-            if (parameters.Count == 1 && parameters.TryGetValue(Constants.BodyPlaceHolderKey, out object? value))
-                return serializer.Serialize(value);
+            if (serializer is not IStringMessageSerializer stringSerializer)
+                throw new InvalidOperationException("Non-string message serializer can't get serialized request body");
+
+            if (parameters?.Count == 1 && parameters.TryGetValue(Constants.BodyPlaceHolderKey, out object? value))
+                return stringSerializer.Serialize(value);
             else
-                return serializer.Serialize(parameters);
+                return stringSerializer.Serialize(parameters);
         }
     }
 

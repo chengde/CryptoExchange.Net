@@ -1,12 +1,13 @@
-﻿using CryptoExchange.Net.Objects;
+﻿using CryptoExchange.Net.Converters.SystemTextJson;
 using System;
-using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace CryptoExchange.Net.SharedApis
 {
     /// <summary>
     /// A symbol representation based on a base and quote asset
     /// </summary>
+    [JsonConverter(typeof(SharedSymbolConverter))]
     public record SharedSymbol
     {
         /// <summary>
@@ -29,6 +30,11 @@ namespace CryptoExchange.Net.SharedApis
         /// Delivery time of the symbol, used for delivery futures to format the symbol name
         /// </summary>
         public DateTime? DeliverTime { get; set; }
+
+        /// <summary>
+        /// Use this constant to dynamically select a USD or USD equivalent asset (stable coin) supported on the exchange
+        /// </summary>
+        public const string UsdOrStable = "CE-UsdStable";
 
         /// <summary>
         /// Create a new SharedSymbol

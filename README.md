@@ -12,15 +12,18 @@ Full list of all libraries part of the CryptoExchange.Net ecosystem. Consider us
 
 ||Exchange|Type|Repository|Nuget|Referral Link|Referral Fee Discount|
 |--|--|--|--|--|--|--|
+|![Aster](https://raw.githubusercontent.com/JKorf/Aster.Net/refs/heads/main/Aster.Net/Icon/icon.png)|Aster|DEX|[JKorf/Aster.Net](https://github.com/JKorf/Aster.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.Aster.net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.Aster.Net)|[Link](https://www.asterdex.com/en/referral/FD2E11)|4%|
 |![Binance](https://raw.githubusercontent.com/JKorf/Binance.Net/refs/heads/master/Binance.Net/Icon/icon.png)|Binance|CEX|[JKorf/Binance.Net](https://github.com/JKorf/Binance.Net)|[![Nuget version](https://img.shields.io/nuget/v/Binance.net.svg?style=flat-square)](https://www.nuget.org/packages/Binance.Net)|[Link](https://accounts.binance.com/register?ref=X5K3F2ZG)|20%|
 |![BingX](https://raw.githubusercontent.com/JKorf/BingX.Net/refs/heads/main/BingX.Net/Icon/BingX.png)|BingX|CEX|[JKorf/BingX.Net](https://github.com/JKorf/BingX.Net)|[![Nuget version](https://img.shields.io/nuget/v/JK.BingX.net.svg?style=flat-square)](https://www.nuget.org/packages/JK.BingX.Net)|[Link](https://bingx.com/invite/FFHRJKWG/)|20%|
 |![Bitfinex](https://raw.githubusercontent.com/JKorf/Bitfinex.Net/refs/heads/master/Bitfinex.Net/Icon/icon.png)|Bitfinex|CEX|[JKorf/Bitfinex.Net](https://github.com/JKorf/Bitfinex.Net)|[![Nuget version](https://img.shields.io/nuget/v/Bitfinex.net.svg?style=flat-square)](https://www.nuget.org/packages/Bitfinex.Net)|-|-|
 |![Bitget](https://raw.githubusercontent.com/JKorf/Bitget.Net/refs/heads/main/Bitget.Net/Icon/icon.png)|Bitget|CEX|[JKorf/Bitget.Net](https://github.com/JKorf/Bitget.Net)|[![Nuget version](https://img.shields.io/nuget/v/JK.Bitget.net.svg?style=flat-square)](https://www.nuget.org/packages/JK.Bitget.Net)|[Link](https://partner.bitget.com/bg/1qlf6pj1)|20%|
 |![BitMart](https://raw.githubusercontent.com/JKorf/BitMart.Net/refs/heads/main/BitMart.Net/Icon/icon.png)|BitMart|CEX|[JKorf/BitMart.Net](https://github.com/JKorf/BitMart.Net)|[![Nuget version](https://img.shields.io/nuget/v/BitMart.net.svg?style=flat-square)](https://www.nuget.org/packages/BitMart.Net)|[Link](https://www.bitmart.com/invite/JKorfAPI/en-US)|30%|
 |![BitMEX](https://raw.githubusercontent.com/JKorf/BitMEX.Net/refs/heads/main/BitMEX.Net/Icon/icon.png)|BitMEX|CEX|[JKorf/BitMEX.Net](https://github.com/JKorf/BitMEX.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.BitMEX.net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.BitMEX.Net)|[Link](https://www.bitmex.com/app/register/94f98e)|30%|
+|![BloFin](https://raw.githubusercontent.com/JKorf/BloFin.Net/refs/heads/main/BloFin.Net/Icon/icon.png)|BloFin|CEX|[JKorf/BloFin.Net](https://github.com/JKorf/BloFin.Net)|[![Nuget version](https://img.shields.io/nuget/v/BloFin.net.svg?style=flat-square)](https://www.nuget.org/packages/BloFin.Net)|-|-|
 |![Bybit](https://raw.githubusercontent.com/JKorf/Bybit.Net/refs/heads/main/ByBit.Net/Icon/icon.png)|Bybit|CEX|[JKorf/Bybit.Net](https://github.com/JKorf/Bybit.Net)|[![Nuget version](https://img.shields.io/nuget/v/Bybit.net.svg?style=flat-square)](https://www.nuget.org/packages/Bybit.Net)|[Link](https://partner.bybit.com/b/jkorf)|-|
 |![Coinbase](https://raw.githubusercontent.com/JKorf/Coinbase.Net/refs/heads/main/Coinbase.Net/Icon/icon.png)|Coinbase|CEX|[JKorf/Coinbase.Net](https://github.com/JKorf/Coinbase.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.Coinbase.Net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.Coinbase.Net)|[Link](https://advanced.coinbase.com/join/T6H54H8)|-|
 |![CoinEx](https://raw.githubusercontent.com/JKorf/CoinEx.Net/refs/heads/master/CoinEx.Net/Icon/icon.png)|CoinEx|CEX|[JKorf/CoinEx.Net](https://github.com/JKorf/CoinEx.Net)|[![Nuget version](https://img.shields.io/nuget/v/CoinEx.net.svg?style=flat-square)](https://www.nuget.org/packages/CoinEx.Net)|[Link](https://www.coinex.com/register?rc=rbtnp)|20%|
+|![CoinW](https://raw.githubusercontent.com/JKorf/CoinW.Net/refs/heads/main/CoinW.Net/Icon/icon.png)|CoinW|CEX|[JKorf/CoinW.Net](https://github.com/JKorf/CoinW.Net)|[![Nuget version](https://img.shields.io/nuget/v/CoinW.net.svg?style=flat-square)](https://www.nuget.org/packages/CoinW.Net)|[Link](https://www.coinw.com/register?rc=rbtnp)|-|
 |![CoinGecko](https://raw.githubusercontent.com/JKorf/CoinGecko.Net/refs/heads/main/CoinGecko.Net/Icon/icon.png)|CoinGecko|-|[JKorf/CoinGecko.Net](https://github.com/JKorf/CoinGecko.Net)|[![Nuget version](https://img.shields.io/nuget/v/CoinGecko.net.svg?style=flat-square)](https://www.nuget.org/packages/CoinGecko.Net)|-|-|
 |![Crypto.com](https://raw.githubusercontent.com/JKorf/CryptoCom.Net/refs/heads/main/CryptoCom.Net/Icon/icon.png)|Crypto.com|CEX|[JKorf/CryptoCom.Net](https://github.com/JKorf/CryptoCom.Net)|[![Nuget version](https://img.shields.io/nuget/v/CryptoCom.net.svg?style=flat-square)](https://www.nuget.org/packages/CryptoCom.Net)|[Link](https://crypto.com/exch/26ge92xbkn)|-|
 |![DeepCoin](https://raw.githubusercontent.com/JKorf/DeepCoin.Net/refs/heads/main/DeepCoin.Net/Icon/icon.png)|DeepCoin|CEX|[JKorf/DeepCoin.Net](https://github.com/JKorf/DeepCoin.Net)|[![Nuget version](https://img.shields.io/nuget/v/DeepCoin.net.svg?style=flat-square)](https://www.nuget.org/packages/DeepCoin.Net)|[Link](https://s.deepcoin.com/jddhfca)|-|
@@ -31,10 +34,16 @@ Full list of all libraries part of the CryptoExchange.Net ecosystem. Consider us
 |![Kucoin](https://raw.githubusercontent.com/JKorf/Kucoin.Net/refs/heads/master/Kucoin.Net/Icon/icon.png)|Kucoin|CEX|[JKorf/Kucoin.Net](https://github.com/JKorf/Kucoin.Net)|[![Nuget version](https://img.shields.io/nuget/v/Kucoin.net.svg?style=flat-square)](https://www.nuget.org/packages/Kucoin.Net)|[Link](https://www.kucoin.com/r/rf/QBS4FPED)|-|
 |![Mexc](https://raw.githubusercontent.com/JKorf/Mexc.Net/refs/heads/main/Mexc.Net/Icon/icon.png)|Mexc|CEX|[JKorf/Mexc.Net](https://github.com/JKorf/Mexc.Net)|[![Nuget version](https://img.shields.io/nuget/v/JK.Mexc.net.svg?style=flat-square)](https://www.nuget.org/packages/JK.Mexc.Net)|-|-|
 |![OKX](https://raw.githubusercontent.com/JKorf/OKX.Net/refs/heads/main/OKX.Net/Icon/icon.png)|OKX|CEX|[JKorf/OKX.Net](https://github.com/JKorf/OKX.Net)|[![Nuget version](https://img.shields.io/nuget/v/JK.OKX.net.svg?style=flat-square)](https://www.nuget.org/packages/JK.OKX.Net)|[Link](https://www.okx.com/join/14592495)|20%|
+|![Toobit](https://raw.githubusercontent.com/JKorf/Toobit.Net/refs/heads/main/Toobit.Net/Icon/icon.png)|Toobit|CEX|[JKorf/Toobit.Net](https://github.com/JKorf/Toobit.Net)|[![Nuget version](https://img.shields.io/nuget/v/Toobit.net.svg?style=flat-square)](https://www.nuget.org/packages/Toobit.Net)|[Link](https://www.toobit.com/en-US/register?invite_code=zsV19h)|-|
+|![Upbit](https://raw.githubusercontent.com/JKorf/Upbit.Net/refs/heads/main/Upbit.Net/Icon/icon.png)|Upbit|CEX|[JKorf/Upbit.Net](https://github.com/JKorf/Upbit.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.Upbit.net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.Upbit.Net)|-|-|
 |![WhiteBit](https://raw.githubusercontent.com/JKorf/WhiteBit.Net/refs/heads/main/WhiteBit.Net/Icon/icon.png)|WhiteBit|CEX|[JKorf/WhiteBit.Net](https://github.com/JKorf/WhiteBit.Net)|[![Nuget version](https://img.shields.io/nuget/v/WhiteBit.net.svg?style=flat-square)](https://www.nuget.org/packages/WhiteBit.Net)|[Link](https://whitebit.com/referral/a8e59b59-186c-4662-824c-3095248e0edf)|-|
 |![XT](https://raw.githubusercontent.com/JKorf/XT.Net/refs/heads/main/XT.Net/Icon/icon.png)|XT|CEX|[JKorf/XT.Net](https://github.com/JKorf/XT.Net)|[![Nuget version](https://img.shields.io/nuget/v/XT.net.svg?style=flat-square)](https://www.nuget.org/packages/XT.Net)|[Link](https://www.xt.com/ru/accounts/register?ref=CZG39C)|25%|
 
 Any of these can be installed independently or install [CryptoClients.Net](https://github.com/jkorf/CryptoClients.Net) which includes all exchange API's.
+
+### Full demo application
+A full demo application is available using the [CryptoClients.Net](https://github.com/jkorf/CryptoClients.Net) library:  
+https://github.com/JKorf/CryptoManager.Net
 
 ## Discord
 [![Nuget version](https://img.shields.io/discord/847020490588422145?style=for-the-badge)](https://discord.gg/MSpeEtSY8t)  
@@ -43,7 +52,7 @@ A Discord server is available [here](https://discord.gg/MSpeEtSY8t). Feel free t
 ## Support the project
 Any support is greatly appreciated.
 
-## Referral
+### Referral
 When creating an account on new exchanges please consider using a referral link from above.
 
 ### Donate
@@ -57,6 +66,101 @@ Make a one time donation in a crypto currency of your choice. If you prefer to d
 Alternatively, sponsor me on Github using [Github Sponsors](https://github.com/sponsors/JKorf). 
 
 ## Release notes
+* Version 10.0.0 - 16 Dec 2025
+    * -
+
+* Version 9.13.0 - 10 Nov 2025
+    * Added SharedTickerType for defining time used for ticker calculations by the API
+    * Added SharedSymbolModel base class to SharedFuturesKline, SharedKline, SharedTrade models
+    * Added IExchangeService interface
+    * Fixed incorrect exchange name in static logger when using multiple libraries
+
+* Version 9.12.0 - 03 Nov 2025
+    * Added constant for selecting a supported USD asset for use in a Shared API/SharedSymbol
+    * Added AliasType to specify only one way conversion for AssetAliases
+    * Removed some unhelpful verbose logs
+
+* Version 9.11.0 - 30 Oct 2025
+    * Added StaticLogger to LibraryHelpers, updated warning logging for converters to use StaticLogger
+    * Added client reference helper to LibraryHelpers
+    * Fixed exception when initial trade snapshot has no items in TradeTracker
+
+* Version 9.10.0 - 15 Oct 2025
+    * Added ITransferRestClient Shared interface	
+    * Added ClientOrderId property to SharedUserTrade model
+    * Updated IBalanceRestClient, GetBalancesRequest now mainly works with SharedAccountType type, allowing more options
+    * Updated IBalanceRestClient, GetBalanceOptions now specifies supported account types
+    * Updated DateTimeConverter to work primarily with decimal instead of double to prevent some floating point issues
+
+* Version 9.9.0 - 06 Oct 2025
+    * Updated socket Subscription status handling
+    * Added SubscriptionStatusChanged event to UpdateSubscription (SubscribeAsync methods reponse)
+    * Fixed timing issue for connection events in UpdateSubscription
+
+* Version 9.8.0 - 30 Sep 2025
+    * Added ContractAddress to SharedAsset model
+    * Added ITrackerFactory interface
+    * Fixed UpdateSubscription still propagating connection events even though the specific listener is unsubscribed
+    * Fixed ExchangeHelpers.AdjustValueStep high precision calculation
+    * Fixed issue increasing the number of websocket connections increasing when sending a query when a previous connection was attempting to reconnect
+    * Fixed EnumConverter to allow mapping empty string values
+
+* Version 9.7.0 - 01 Sep 2025
+    * Added LibraryHelpers.CreateHttpClientMessageHandle to standardize HttpMessageHandler creation
+    * Added REST client option for selecting HTTP protocol version
+    * Added REST client option for HTTP client keep alive interval
+    * Added HttpVersion to WebCallResult responses
+    * Updated request logic to default to using HTTP version 2.0 for dotnet core
+
+* Version 9.6.0 - 25 Aug 2025
+    * Added support for parsing REST response even though status indicates error
+    * Added better support for subscriptions without subscribe confirmation
+    * Added check in websocket for receiving 401 unauthorized http response status when 101 was expected
+    * Removed obsolete attribute on Error.Code property, updated the description
+
+* Version 9.5.0 - 19 Aug 2025
+    * Added better error handling support
+    * Added ErrorDescription, ErrorType and IsTransient to Error object
+    * Added ErrorCode in favor of Code
+    * Updated some error messages
+    * Refactored RestApiClient request authentication and AuthenticationProvider to prevent duplicate query string / body serialization
+    * Fixed IOrderBookSocketClient Shared interface not getting registered in DI
+    * Fixed response type in websocket queries not interested in the response
+    * Fixed timing issue in query response processing
+
+* Version 9.4.0 - 04 Aug 2025
+    * Updated Shared symbol requests/subscriptions to allow multiple symbols in one call if supported
+
+* Version 9.3.1 - 29 Jul 2025
+    * Added BaseAndQuoteAssetAndContracts value to SharedQuantityType enum
+    * Added Id property to SharedPosition model
+
+* Version 9.3.0 - 23 Jul 2025
+    * Updated websocket message to listener matching logic to be more flexible
+    * Updated decimal parser to support "NaN" and "-Infinity" strings, added check for negative overflow value, improved performance in most cases
+
+* Version 9.2.1 - 16 Jul 2025
+    * Added setting for whether or not to process unparsable websocket messages
+    * Fixed issue causing duplicate subscriptions and data in the TradeTracker and KlineTracker when websocket connection was reconnected
+
+* Version 9.2.0 - 14 Jul 2025
+    * Added support for sending byte data on websocket
+    * Added support for handling both string and byte data with different IMessageAccessor types
+    * Split IMessageSerializer into IByteMessageSerializer and IStringMessageSerializer
+    * Renamed IMessageAccessor.IsJson to IsValid
+    * Refactored ArrayConverter to remove separate converter options cache
+
+* Version 9.1.0 - 28 May 2025
+    * Added JsonConverter implementation for SharedQuantity and SharedSymbol types, making usage of the types easier
+    * Updated dotnet dependency packages from 9.0.0 to 9.0.5
+    * Replaced Microsoft.Extensions.Logging.Abstractions with Microsoft.Extensions.Logging
+    * Replaced Microsoft.Extensions.Options.ConfigurationExtensions with Microsoft.Extensions.Configuration.Binder, which includes a source generator for AOT publishing
+    * Removed redundant Microsoft.Extensions.DependencyInjection.Abstractions package reference
+
+* Version 9.0.1 - 20 May 2025
+    * Improved response time on CancellationToken cancel during subscribing
+    * Added support for sending query without expecting a response
+
 * Version 9.0.0 - 13 May 2025
     * Added support for Native AOT compilation
     * Updated all IEnumerable response types to array response types

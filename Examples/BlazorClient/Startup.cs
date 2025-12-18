@@ -31,19 +31,19 @@ namespace BlazorClient
             services.AddBinance(restOptions =>
             {
                 restOptions.ApiCredentials = new ApiCredentials("KEY", "SECRET");
-            }, socketOptions =>
-            {
-                socketOptions.ApiCredentials = new ApiCredentials("KEY", "SECRET");
             });
 
+            services.AddAster();
             services.AddBingX();
             services.AddBitfinex();
             services.AddBitget();
             services.AddBitMart();
             services.AddBitMEX();
+            services.AddBloFin();
             services.AddBybit();
             services.AddCoinbase();
             services.AddCoinEx();
+            services.AddCoinW();
             services.AddCryptoCom();
             services.AddDeepCoin();
             services.AddGateIo();
@@ -53,7 +53,10 @@ namespace BlazorClient
             services.AddKucoin();
             services.AddMexc();
             services.AddOKX();
+            services.AddToobit();
+            services.AddUpbit();
             services.AddWhiteBit();
+            services.AddXT();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

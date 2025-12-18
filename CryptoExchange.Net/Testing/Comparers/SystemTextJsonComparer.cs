@@ -5,13 +5,14 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using CryptoExchange.Net.Converters;
 using CryptoExchange.Net.Converters.SystemTextJson;
 
-#pragma warning disable IL2026 // Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code
-#pragma warning disable IL3050 // Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.
+#pragma warning disable IL2026
+#pragma warning disable IL2070
+#pragma warning disable IL2075
+#pragma warning disable IL3050
 
 namespace CryptoExchange.Net.Testing.Comparers
 {
@@ -384,12 +385,12 @@ namespace CryptoExchange.Net.Testing.Comparers
                 var stringValue = jsonValue.GetString();
                 if (objectValue is decimal dec)
                 {
-                    if (decimal.Parse(stringValue!, CultureInfo.InvariantCulture) != dec)
+                    if (ExchangeHelpers.ParseDecimal(stringValue!) != dec)
                         throw new Exception($"{method}: {property} not equal: {stringValue} vs {dec}");
                 }
                 else if (objectValue is DateTime time)
                 {
-                    if (!string.IsNullOrEmpty(stringValue) && time != DateTimeConverter.ParseFromString(stringValue!))
+                    if (!string.IsNullOrEmpty(stringValue) && time != DateTimeConverter.ParseFromString(stringValue!, null))
                         throw new Exception($"{method}: {property} not equal: {stringValue} vs {time}");
                 }
                 else if (objectValue is bool bl)
@@ -413,7 +414,7 @@ namespace CryptoExchange.Net.Testing.Comparers
                 var value = jsonValue.GetDecimal();
                 if (objectValue is DateTime time)
                 {
-                    if (time != DateTimeConverter.ParseFromDouble((double)value))
+                    if (time != DateTimeConverter.ParseFromDecimal(value))
                         throw new Exception($"{method}: {property} not equal: {DateTimeConverter.ParseFromDouble((double)value!)} vs {time}");
                 }
                 else if (propertyType.IsEnum || Nullable.GetUnderlyingType(propertyType)?.IsEnum == true)
