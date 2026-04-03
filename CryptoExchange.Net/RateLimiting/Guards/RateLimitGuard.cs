@@ -85,7 +85,7 @@ namespace CryptoExchange.Net.RateLimiting.Guards
             Limit = limit;
             TimeSpan = timeSpan;
             _keySelector = keySelector;
-            _decayRate = decayPerTimeSpan;
+            _decayRate = decayPerTimeSpan;  
             _connectionWeight = connectionWeight;
         }
 
