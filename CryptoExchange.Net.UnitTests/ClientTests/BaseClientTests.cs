@@ -1,0 +1,34 @@
+﻿using NUnit.Framework;
+
+namespace CryptoExchange.Net.UnitTests.ClientTests
+{
+    [TestFixture()]
+    public class BaseClientTests
+    {
+        //[TestCase]
+        //public void DeserializingValidJson_Should_GiveSuccessfulResult()
+        //{
+        //    // arrange
+        //    var client = new TestBaseClient();
+
+        //    // act
+        //    var result = client.SubClient.Deserialize<object>("{\"testProperty\": 123}");
+
+        //    // assert
+        //    Assert.That(result.Success);
+        //}
+
+        [TestCase("https://api.test.com/api", new[] { "path1", "path2" }, "https://api.test.com/api/path1/path2")]
+        [TestCase("https://api.test.com/api", new[] { "path1", "/path2" }, "https://api.test.com/api/path1/path2")]
+        [TestCase("https://api.test.com/api", new[] { "path1/", "path2" }, "https://api.test.com/api/path1/path2")]
+        [TestCase("https://api.test.com/api", new[] { "path1/", "/path2" }, "https://api.test.com/api/path1/path2")]
+        [TestCase("https://api.test.com/api/", new[] { "path1", "path2" }, "https://api.test.com/api/path1/path2")]
+        [TestCase("https://api.test.com", new[] { "test-path/test-path" }, "https://api.test.com/test-path/test-path")]
+        [TestCase("https://api.test.com/", new[] { "test-path/test-path" }, "https://api.test.com/test-path/test-path")]
+        public void AppendPathTests(string baseUrl, string[] path, string expected)
+        {
+            var result = baseUrl.AppendPath(path);
+            Assert.That(expected == result);
+        }
+    }
+}

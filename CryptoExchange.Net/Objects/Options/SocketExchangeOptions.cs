@@ -76,9 +76,13 @@ namespace CryptoExchange.Net.Objects.Options
         public int? ReceiveBufferSize { get; set; }
 
         /// <summary>
-        /// Whether or not to use the updated deserialization logic, default is true
+        /// ctor
         /// </summary>
-        public bool UseUpdatedDeserialization { get; set; } = true;
+        public SocketExchangeOptions()
+        {
+            // Enable auto timestamping by default for sockets
+            AutoTimestamp = true;
+        }
 
         /// <summary>
         /// Create a copy of this options
@@ -87,7 +91,7 @@ namespace CryptoExchange.Net.Objects.Options
         /// <returns></returns>
         public T Set<T>(T item) where T : SocketExchangeOptions, new()
         {
-            item.ApiCredentials = ApiCredentials?.Copy();
+            item.AutoTimestamp = AutoTimestamp;
             item.OutputOriginalData = OutputOriginalData;
             item.ReconnectPolicy = ReconnectPolicy;
             item.DelayAfterConnect = DelayAfterConnect;
@@ -101,17 +105,15 @@ namespace CryptoExchange.Net.Objects.Options
             item.RateLimitingBehaviour = RateLimitingBehaviour;
             item.RateLimiterEnabled = RateLimiterEnabled;
             item.ReceiveBufferSize = ReceiveBufferSize;
-            item.UseUpdatedDeserialization = UseUpdatedDeserialization;
             return item;
         }
     }
 
-    /// <summary>
-    /// Options for a socket exchange client
-    /// </summary>
-    /// <typeparam name="TEnvironment"></typeparam>
-    public class SocketExchangeOptions<TEnvironment> : SocketExchangeOptions where TEnvironment : TradeEnvironment
+    /// <inheritdoc />
+    public class SocketExchangeOptions<TEnvironment> : SocketExchangeOptions
+        where TEnvironment : TradeEnvironment
     {
+
         /// <summary>
         /// Trade environment. Contains info about URL's to use to connect to the API. To swap environment select another environment for
         /// the exchange's environment list or create a custom environment using either `[Exchange]Environment.CreateCustom()` or `[Exchange]Environment.[Environment]`, for example `KucoinEnvironment.TestNet` or `BinanceEnvironment.Live`
@@ -134,17 +136,29 @@ namespace CryptoExchange.Net.Objects.Options
     /// <summary>
     /// Options for a socket exchange client
     /// </summary>
-    /// <typeparam name="TEnvironment"></typeparam>
-    /// <typeparam name="TApiCredentials"></typeparam>
-    public class SocketExchangeOptions<TEnvironment, TApiCredentials> : SocketExchangeOptions<TEnvironment> where TEnvironment : TradeEnvironment where TApiCredentials : ApiCredentials
+    public class SocketExchangeOptions<TEnvironment, TApiCredentials> : SocketExchangeOptions<TEnvironment>
+        where TEnvironment : TradeEnvironment
+        where TApiCredentials : ApiCredentials
     {
         /// <summary>
         /// The api credentials used for signing requests to this API.
         /// </summary>        
-        public new TApiCredentials? ApiCredentials
+        public TApiCredentials? ApiCredentials { get; set; }
+
+        /// <summary>
+        /// Set the values of this options on the target options
+        /// </summary>
+        public new T Set<T>(T item) where T : SocketExchangeOptions<TEnvironment, TApiCredentials>, new()
         {
-            get => (TApiCredentials?)base.ApiCredentials;
-            set => base.ApiCredentials = value;
+            base.Set(item);
+            item.ApiCredentials = (TApiCredentials?)ApiCredentials?.Copy();
+            return item;
+        }
+
+        /// <inheritdoc />
+        public override string ToString()
+        {
+            return $"{base.ToString()}, ApiCredentials: {(ApiCredentials == null ? "-" : "set")}";
         }
     }
 }

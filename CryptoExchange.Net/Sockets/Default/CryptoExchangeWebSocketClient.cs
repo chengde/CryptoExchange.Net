@@ -48,8 +48,8 @@ namespace CryptoExchange.Net.Sockets.Default
         private readonly string _baseAddress;
         private int _reconnectAttempt;
         private readonly int _receiveBufferSize;
+        private readonly RequestDefinition _requestDefinition;
 
-        private const int _defaultReceiveBufferSize = 1048576;
         private const int _sendBufferSize = 4096;
 
         private int _bytesReceived = 0;
@@ -71,7 +71,7 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <summary>
         /// The timestamp this socket has been active for the last time
         /// </summary>
-        public DateTime LastActionTime { get; private set; }
+        public DateTime? LastReceiveTime { get; private set; }
         
         /// <inheritdoc />
         public Uri Uri => Parameters.Uri;
@@ -88,15 +88,13 @@ namespace CryptoExchange.Net.Sockets.Default
             get
             {
                 UpdateReceivedMessages();
-                return Math.Round(_prevSlotBytesReceived * (_lastBytesReceivedUpdate - _prevSlotBytesReceivedUpdate).TotalSeconds / 1000);
+                var seconds = (_lastBytesReceivedUpdate - _prevSlotBytesReceivedUpdate).TotalSeconds;
+                return seconds > 0 ? Math.Round(_prevSlotBytesReceived / seconds / 1000) : 0;
             }
         }
 
         /// <inheritdoc />
         public event Func<Task>? OnClose;
-
-        /// <inheritdoc />
-        public event Func<WebSocketMessageType, ReadOnlyMemory<byte>, Task>? OnStreamMessage;
 
         /// <inheritdoc />
         public event Func<int, Task>? OnRequestSent;
@@ -139,10 +137,8 @@ namespace CryptoExchange.Net.Sockets.Default
             _sendEvent = new AsyncResetEvent();
             _sendBuffer = new ConcurrentQueue<SendItem>();
             _ctsSource = new CancellationTokenSource();
-            if (websocketParameters.UseUpdatedDeserialization)
-                _receiveBufferSize = websocketParameters.ReceiveBufferSize ?? 65536;
-            else
-                _receiveBufferSize = websocketParameters.ReceiveBufferSize ?? _defaultReceiveBufferSize;
+            _receiveBufferSize = websocketParameters.ReceiveBufferSize ?? 65536;
+            _requestDefinition = new RequestDefinition(Uri.AbsolutePath, HttpMethod.Get) { ConnectionId = Id };
 
             _closeSem = new SemaphoreSlim(1, 1);
             _socket = CreateSocket();
@@ -212,8 +208,7 @@ namespace CryptoExchange.Net.Sockets.Default
             {
                 if (Parameters.RateLimiter != null)
                 {
-                    var definition = new RequestDefinition(Uri.AbsolutePath, HttpMethod.Get) { ConnectionId = Id };
-                    var limitResult = await Parameters.RateLimiter.ProcessAsync(_logger, Id, RateLimitItemType.Connection, definition, _baseAddress, null, 1, Parameters.RateLimitingBehavior, null, _ctsSource.Token).ConfigureAwait(false);
+                    var limitResult = await Parameters.RateLimiter.ProcessAsync(_logger, Id, RateLimitItemType.Connection, _requestDefinition, _baseAddress, null, 1, Parameters.RateLimitingBehavior, null, _ctsSource.Token).ConfigureAwait(false);
                     if (!limitResult)
                         return new CallResult(new ClientRateLimitError("Connection limit reached"));
                 }
@@ -225,7 +220,9 @@ namespace CryptoExchange.Net.Sockets.Default
             catch (Exception e)
             {
                 if (ct.IsCancellationRequested)
+                {
                     _logger.SocketConnectingCanceled(Id);
+                }
                 else if (!_ctsSource.IsCancellationRequested)
                 {
                     // if _ctsSource was canceled this was already logged
@@ -271,11 +268,10 @@ namespace CryptoExchange.Net.Sockets.Default
                 var sendTask = SendLoopAsync();
                 Task receiveTask;
 #if !NETSTANDARD2_0
-                if (Parameters.UseUpdatedDeserialization)
-                    receiveTask = ReceiveLoopNewAsync();
-                else
+                receiveTask = ReceiveLoopNewAsync();
+#else
+                receiveTask = ReceiveLoopAsync();
 #endif
-                    receiveTask = ReceiveLoopAsync();
                 var timeoutTask = Parameters.Timeout != null && Parameters.Timeout > TimeSpan.FromSeconds(0) ? CheckTimeoutAsync() : Task.CompletedTask;
                 await Task.WhenAll(sendTask, receiveTask, timeoutTask).ConfigureAwait(false);
                 _logger.SocketFinishedProcessing(Id);
@@ -300,6 +296,9 @@ namespace CryptoExchange.Net.Sockets.Default
                     SetProcessState(ProcessState.Reconnecting);
                     await (OnReconnecting?.Invoke() ?? Task.CompletedTask).ConfigureAwait(false);                    
                 }
+
+                if (Parameters.RateLimiter != null)
+                    await Parameters.RateLimiter.ResetAsync(RateLimitItemType.Request, _requestDefinition, _baseAddress, null, null, default).ConfigureAwait(false);
 
                 // Delay here to prevent very rapid looping when a connection to the server is accepted and immediately disconnected
                 var initialDelay = GetReconnectDelay();
@@ -492,7 +491,6 @@ namespace CryptoExchange.Net.Sockets.Default
             _disposed = true;
             _socket.Dispose();
             _ctsSource?.Dispose();
-            _sendEvent.Dispose();
             _logger.SocketDisposed(Id);
         }
 
@@ -502,7 +500,6 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <returns></returns>
         private async Task SendLoopAsync()
         {
-            var requestDefinition = new RequestDefinition(Uri.AbsolutePath, HttpMethod.Get) { ConnectionId = Id };
             try
             {
                 while (true)
@@ -526,7 +523,7 @@ namespace CryptoExchange.Net.Sockets.Default
                         {
                             try
                             {
-                                var limitResult = await Parameters.RateLimiter.ProcessAsync(_logger, data.Id, RateLimitItemType.Request, requestDefinition, _baseAddress, null, data.Weight, Parameters.RateLimitingBehavior, null, _ctsSource.Token).ConfigureAwait(false);
+                                var limitResult = await Parameters.RateLimiter.ProcessAsync(_logger, data.Id, RateLimitItemType.Request, _requestDefinition, _baseAddress, null, data.Weight, Parameters.RateLimitingBehavior, null, _ctsSource.Token).ConfigureAwait(false);
                                 if (!limitResult)
                                 {
                                     await (OnRequestRateLimited?.Invoke(data.Id) ?? Task.CompletedTask).ConfigureAwait(false);
@@ -578,6 +575,7 @@ namespace CryptoExchange.Net.Sockets.Default
             }
         }
 
+#if NETSTANDARD2_0
         /// <summary>
         /// Loop for receiving and reassembling data
         /// </summary>
@@ -627,6 +625,7 @@ namespace CryptoExchange.Net.Sockets.Default
                             break;
                         }
 
+                        LastReceiveTime = DateTime.UtcNow;
                         if (receiveResult.MessageType == WebSocketMessageType.Close)
                         {
                             // Connection closed
@@ -666,10 +665,7 @@ namespace CryptoExchange.Net.Sockets.Default
                                 if (_logger.IsEnabled(LogLevel.Trace))
                                     _logger.SocketReceivedSingleMessage(Id, receiveResult.Count);
 
-                                if (!Parameters.UseUpdatedDeserialization)
-                                    await ProcessData(receiveResult.MessageType, new ReadOnlyMemory<byte>(buffer.Array!, buffer.Offset, receiveResult.Count)).ConfigureAwait(false);
-                                else
-                                    ProcessDataNew(receiveResult.MessageType, new ReadOnlySpan<byte>(buffer.Array!, buffer.Offset, receiveResult.Count));
+                                ProcessDataNew(receiveResult.MessageType, new ReadOnlySpan<byte>(buffer.Array!, buffer.Offset, receiveResult.Count));
                             }
                             else
                             {
@@ -703,11 +699,7 @@ namespace CryptoExchange.Net.Sockets.Default
                                 _logger.SocketReassembledMessage(Id, multipartStream!.Length);
 
                             // Get the underlying buffer of the memory stream holding the written data and delimit it (GetBuffer return the full array, not only the written part)
-
-                            if (!Parameters.UseUpdatedDeserialization)
-                                await ProcessData(receiveResult.MessageType, new ReadOnlyMemory<byte>(multipartStream!.GetBuffer(), 0, (int)multipartStream.Length)).ConfigureAwait(false);
-                            else
-                                ProcessDataNew(receiveResult.MessageType, new ReadOnlySpan<byte>(multipartStream!.GetBuffer(), 0, (int)multipartStream.Length));
+                             ProcessDataNew(receiveResult.MessageType, new ReadOnlySpan<byte>(multipartStream!.GetBuffer(), 0, (int)multipartStream.Length));
                         }
                         else
                         {
@@ -732,6 +724,7 @@ namespace CryptoExchange.Net.Sockets.Default
                 _logger.SocketReceiveLoopFinished(Id);
             }
         }
+#endif
 
 #if !NETSTANDARD2_0
         /// <summary>
@@ -783,6 +776,7 @@ namespace CryptoExchange.Net.Sockets.Default
                             break;
                         }
 
+                        LastReceiveTime = DateTime.UtcNow;
                         if (receiveResult.MessageType == WebSocketMessageType.Close)
                         {
                             // Connection closed
@@ -891,20 +885,7 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <returns></returns>
         protected void ProcessDataNew(WebSocketMessageType type, ReadOnlySpan<byte> data)
         {
-            LastActionTime = DateTime.UtcNow;
             _connection.HandleStreamMessage2(type, data);
-        }
-
-        /// <summary>
-        /// Process a stream message
-        /// </summary>
-        /// <param name="type"></param>
-        /// <param name="data"></param>
-        /// <returns></returns>
-        protected async Task ProcessData(WebSocketMessageType type, ReadOnlyMemory<byte> data)
-        {
-            LastActionTime = DateTime.UtcNow;
-            await (OnStreamMessage?.Invoke(type, data) ?? Task.CompletedTask).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -914,7 +895,7 @@ namespace CryptoExchange.Net.Sockets.Default
         protected async Task CheckTimeoutAsync()
         {
             _logger.SocketStartingTaskForNoDataReceivedCheck(Id, Parameters.Timeout);
-            LastActionTime = DateTime.UtcNow;
+            LastReceiveTime = DateTime.UtcNow;
             try 
             { 
                 while (true)
@@ -922,7 +903,7 @@ namespace CryptoExchange.Net.Sockets.Default
                     if (_ctsSource.IsCancellationRequested)
                         return;
 
-                    if (DateTime.UtcNow - LastActionTime > Parameters.Timeout)
+                    if (DateTime.UtcNow - LastReceiveTime > Parameters.Timeout)
                     {
                         _logger.SocketNoDataReceiveTimoutReconnect(Id, Parameters.Timeout);
                         _ = ReconnectAsync().ConfigureAwait(false);

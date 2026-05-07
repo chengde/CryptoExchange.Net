@@ -82,13 +82,25 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 #if NET8_0_OR_GREATER
         private static FrozenSet<EnumMapping>? _mappingToEnum = null;
         private static FrozenDictionary<T, string>? _mappingToString = null;
+
+        private static bool RunOptimistic => true;
 #else
         private static List<EnumMapping>? _mappingToEnum = null;
         private static Dictionary<T, string>? _mappingToString = null;
+        
+        // In NetStandard the `ValueTextEquals` method used is slower than just string comparing
+        // so only bother in newer frameworks
+        private static bool RunOptimistic => false;
 #endif
         private NullableEnumConverter? _nullableEnumConverter = null;
 
+        private static Type _enumType = typeof(T);
+        private static T? _undefinedEnumValue;
+        private static bool _hasFlagsAttribute = _enumType.IsDefined(typeof(FlagsAttribute));
         private static ConcurrentBag<string> _unknownValuesWarned = new ConcurrentBag<string>();
+        private static ConcurrentBag<string> _notOptimalValuesWarned = new ConcurrentBag<string>();
+
+        private const int _optimisticValueCountThreshold = 6;
 
         internal class NullableEnumConverter : JsonConverter<T?>
         {
@@ -119,30 +131,51 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
         /// <inheritdoc />
         public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var t = ReadNullable(ref reader, typeToConvert, options, out var isEmptyString);
-            if (t == null)
-            {
-                if (isEmptyString && !_unknownValuesWarned.Contains(null))
-                {
-                    // We received an empty string and have no mapping for it, and the property isn't nullable
-                    LibraryHelpers.StaticLogger?.LogWarning($"Received null or empty enum value, but property type is not a nullable enum. EnumType: {typeof(T).FullName}. If you think {typeof(T).FullName} should be nullable please open an issue on the Github repo");
-                }
-
-                return new T(); // return default value
-            }
-            else
-            {
+            var t = ReadNullable(ref reader, typeToConvert, options, out var isEmptyStringOrNull);
+            if (t != null)
                 return t.Value;
+            
+            if (isEmptyStringOrNull && !_unknownValuesWarned.Contains(null))
+            {
+                // We received an empty string and have no mapping for it, and the property isn't nullable
+                _unknownValuesWarned.Add(null!);
+                LibraryHelpers.StaticLogger?.LogWarning($"Received null or empty enum value, but property type is not a nullable enum. EnumType: {typeof(T).FullName}. If you think {typeof(T).FullName} should be nullable please open an issue on the Github repo");
             }
+
+            return GetUndefinedEnumValue();
         }
 
-        private T? ReadNullable(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options, out bool isEmptyString)
+        private T GetUndefinedEnumValue()
         {
-            isEmptyString = false;
-            var enumType = typeof(T);
+            if (_undefinedEnumValue != null)
+                return _undefinedEnumValue.Value;
+
+            var type = typeof(T);
+            if (!Enum.IsDefined(type, -9))
+                _undefinedEnumValue = (T)Enum.ToObject(type, -9);
+            else if (!Enum.IsDefined(type, -99))
+                _undefinedEnumValue = (T)Enum.ToObject(type, -99);
+            else
+                _undefinedEnumValue = (T)Enum.ToObject(type, -999);
+
+            return (T)_undefinedEnumValue;
+        }
+
+        private T? ReadNullable(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options, out bool isEmptyStringOrNull)
+        {
+            isEmptyStringOrNull = false;
             if (_mappingToEnum == null)
                 CreateMapping();
 
+            bool optimisticCheckDone = false;
+            if (RunOptimistic)
+            {
+                var resultOptimistic = GetValueOptimistic(ref reader, ref optimisticCheckDone);
+                if (resultOptimistic != null)
+                    return resultOptimistic.Value;
+            }
+
+            var isNumber = reader.TokenType == JsonTokenType.Number;
             var stringValue = reader.TokenType switch
             {
                 JsonTokenType.String => reader.GetString(),
@@ -154,13 +187,17 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
             };
 
             if (stringValue is null)
-                return null;
-
-            if (!GetValue(enumType, stringValue, out var result))
             {
+                isEmptyStringOrNull = true;
+                return null;
+            }
+
+            if (!GetValue(stringValue, optimisticCheckDone, out var result))
+            {
+                // Note: checking this here and before the GetValue seems redundant but it allows enum mapping for empty strings
                 if (string.IsNullOrWhiteSpace(stringValue))
                 {
-                    isEmptyString = true;
+                    isEmptyStringOrNull = true;
                 }
                 else
                 {
@@ -168,11 +205,20 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                     if (!_unknownValuesWarned.Contains(stringValue))
                     {
                         _unknownValuesWarned.Add(stringValue!);
-                        LibraryHelpers.StaticLogger?.LogWarning($"Cannot map enum value. EnumType: {enumType.FullName}, Value: {stringValue}, Known values: {string.Join(", ", _mappingToEnum!.Select(m => m.Value))}. If you think {stringValue} should added please open an issue on the Github repo");
+                        LibraryHelpers.StaticLogger?.LogWarning($"Cannot map enum value. EnumType: {_enumType.FullName}, Value: {stringValue}, Known values: [{string.Join(", ", _mappingToEnum!.Select(m => $"{m.StringValue}: {m.Value}"))}]. If you think {stringValue} should be added please open an issue on the Github repo");
                     }
                 }
 
                 return null;
+            }
+
+            if (optimisticCheckDone)
+            {
+                if (!_notOptimalValuesWarned.Contains(stringValue))
+                {
+                    _notOptimalValuesWarned.Add(stringValue!);
+                    LibraryHelpers.StaticLogger?.LogTrace($"Enum mapping sub-optimal. EnumType: {_enumType.FullName}, Value: {stringValue}, Known values: [{string.Join(", ", _mappingToEnum!.Select(m => $"{m.StringValue}: {m.Value}"))}]");
+                }
             }
 
             return result;
@@ -185,18 +231,50 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
             writer.WriteStringValue(stringValue);
         }
 
-        private static bool GetValue(Type objectType, string value, out T? result)
+        /// <summary>
+        /// Try to get the enum value based on the string value using the Utf8JsonReader's ValueTextEquals method. 
+        /// This is an optimization to avoid string allocations when possible, but can only match case sensitively
+        /// </summary>
+        private static T? GetValueOptimistic(ref Utf8JsonReader reader, ref bool optimisticCheckDone)
+        {
+            if (reader.TokenType != JsonTokenType.String)
+            {
+                optimisticCheckDone = false;
+                return null;
+            }
+
+            if (_mappingToEnum!.Count >= _optimisticValueCountThreshold)
+            {
+                optimisticCheckDone = false;
+                return null;
+            }
+
+            optimisticCheckDone = true;
+            foreach (var item in _mappingToEnum!)
+            {
+                if (reader.ValueTextEquals(item.StringValue))
+                    return item.Value;
+            }
+
+            return null;
+        }
+
+        private static bool GetValue(string value, bool optimisticCheckDone, out T? result)
         {
             if (_mappingToEnum != null)
             {
                 EnumMapping? mapping = null;
-                // Try match on full equals
-                foreach (var item in _mappingToEnum)
+                // If we tried the optimistic path first we already know its not case match
+                if (!optimisticCheckDone) 
                 {
-                    if (item.StringValue.Equals(value, StringComparison.Ordinal))
+                    // Try match on full equals
+                    foreach (var item in _mappingToEnum)
                     {
-                        mapping = item;
-                        break;
+                        if (item.StringValue.Equals(value, StringComparison.Ordinal))
+                        {
+                            mapping = item;
+                            break;
+                        }
                     }
                 }
 
@@ -220,10 +298,10 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                 }
             }
 
-            if (objectType.IsDefined(typeof(FlagsAttribute)))
+            if (_hasFlagsAttribute)
             {
                 var intValue = int.Parse(value);
-                result = (T)Enum.ToObject(objectType, intValue);
+                result = (T)Enum.ToObject(_enumType, intValue);
                 return true;
             }
 
@@ -245,7 +323,17 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
             try
             {
                 // If no explicit mapping is found try to parse string
-                result = (T)Enum.Parse(objectType, value, true);
+#if NET8_0_OR_GREATER
+                result = Enum.Parse<T>(value, true);
+#else
+                result = (T)Enum.Parse(_enumType, value, true);
+#endif
+                if (!Enum.IsDefined(_enumType, result))
+                {
+                    result = default;
+                    return false;
+                }
+
                 return true;
             }
             catch (Exception)
@@ -257,11 +345,12 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 
         private static void CreateMapping()
         {
-            var mappingToEnum = new List<EnumMapping>();
-            var mappingToString = new Dictionary<T, string>();
+            var mappingStringToEnum = new List<EnumMapping>();
+            var mappingEnumToString = new Dictionary<T, string>();
 
-            var enumType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
-            var enumMembers = enumType.GetFields();
+#pragma warning disable IL2080
+            var enumMembers = _enumType.GetFields();
+#pragma warning restore IL2080
             foreach (var member in enumMembers)
             {
                 var maps = member.GetCustomAttributes(typeof(MapAttribute), false);
@@ -269,21 +358,33 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
                 {
                     foreach (var value in attribute.Values)
                     {
-                        var enumVal = (T)Enum.Parse(enumType, member.Name);
-                        mappingToEnum.Add(new EnumMapping(enumVal, value));
-                        if (!mappingToString.ContainsKey(enumVal))
-                            mappingToString.Add(enumVal, value);
+#if NET8_0_OR_GREATER
+                        var enumVal = Enum.Parse<T>(member.Name);
+#else
+                        var enumVal = (T)Enum.Parse(_enumType, member.Name);
+#endif
+
+                        mappingStringToEnum.Add(new EnumMapping(enumVal, value));
+                        if (!mappingEnumToString.ContainsKey(enumVal))
+                            mappingEnumToString.Add(enumVal, value);
                     }
                 }
             }
 
 #if NET8_0_OR_GREATER
-            _mappingToEnum = mappingToEnum.ToFrozenSet();
-            _mappingToString = mappingToString.ToFrozenDictionary();
+            _mappingToEnum = mappingStringToEnum.ToFrozenSet();
+            _mappingToString = mappingEnumToString.ToFrozenDictionary();
 #else
-            _mappingToEnum = mappingToEnum;
-            _mappingToString = mappingToString;
+            _mappingToEnum = mappingStringToEnum;
+            _mappingToString = mappingEnumToString;
 #endif
+        }
+
+        // For testing purposes only, allows resetting the static mapping and warnings
+        internal static void Reset()
+        {
+            _undefinedEnumValue = null;
+            _unknownValuesWarned = new ConcurrentBag<string>();
         }
 
         /// <summary>
@@ -307,7 +408,6 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
         /// <returns></returns>
         public static T? ParseString(string value)
         {
-            var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
             if (_mappingToEnum == null)
                 CreateMapping();
 
@@ -340,8 +440,11 @@ namespace CryptoExchange.Net.Converters.SystemTextJson
 
             try
             {
-                // If no explicit mapping is found try to parse string
-                return (T)Enum.Parse(type, value, true);
+#if NET8_0_OR_GREATER
+                return Enum.Parse<T>(value, true);
+#else
+                return (T)Enum.Parse(_enumType, value, true);
+#endif
             }
             catch (Exception)
             {

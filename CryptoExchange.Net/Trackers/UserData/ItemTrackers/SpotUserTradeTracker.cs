@@ -1,0 +1,154 @@
+﻿using CryptoExchange.Net.Objects;
+using CryptoExchange.Net.Objects.Sockets;
+using CryptoExchange.Net.SharedApis;
+using CryptoExchange.Net.Trackers.UserData.Objects;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace CryptoExchange.Net.Trackers.UserData.ItemTrackers
+{
+    /// <summary>
+    /// Spot user trade tracker
+    /// </summary>
+    public class SpotUserTradeTracker : UserDataItemTracker<SharedUserTrade>
+    {
+        private readonly ISpotOrderRestClient _restClient;
+        private readonly IUserTradeSocketClient? _socketClient;
+        private readonly ExchangeParameters? _exchangeParameters;
+        private readonly TimeSpan _pollOverlapPeriod = TimeSpan.FromSeconds(3);
+
+        internal Func<string[]>? GetTrackedOrderIds { get; set; }
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        public SpotUserTradeTracker(
+            ILogger logger,
+            UserDataSymbolTracker symbolTracker,
+            ISpotOrderRestClient restClient,
+            IUserTradeSocketClient? socketClient,
+            TrackerItemConfig config,
+            IEnumerable<SharedSymbol> symbols,
+            bool onlyTrackProvidedSymbols,
+            ExchangeParameters? exchangeParameters = null
+            ) : base(logger, symbolTracker, UserDataType.Trades, restClient.Exchange, config)
+        {
+            if (_socketClient == null)
+                config = config with { PollIntervalConnected = config.PollIntervalDisconnected };
+
+            _restClient = restClient;
+            _socketClient = socketClient;
+            _exchangeParameters = exchangeParameters;
+        }
+
+        internal void ClearDataForSymbol(SharedSymbol symbol)
+        {
+            foreach (var trade in _store)
+            {
+                if (trade.Value.SharedSymbol!.TradingMode == symbol.TradingMode
+                    && trade.Value.SharedSymbol.BaseAsset == symbol.BaseAsset
+                    && trade.Value.SharedSymbol.QuoteAsset == symbol.QuoteAsset)
+                {
+                    _store.TryRemove(trade.Key, out _);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        protected override string GetKey(SharedUserTrade item) => item.Id;
+        /// <inheritdoc />
+        protected override bool? CheckIfUpdateShouldBeApplied(SharedUserTrade existingItem, SharedUserTrade updateItem) => false;
+        /// <inheritdoc />
+        protected override bool Update(SharedUserTrade existingItem, SharedUserTrade updateItem) => false; // Trades are never updated
+        /// <inheritdoc />
+        protected override TimeSpan GetAge(DateTime time, SharedUserTrade item) => time - item.Timestamp;
+
+        /// <inheritdoc />
+        protected override async Task<bool> DoPollAsync()
+        {
+            var anyError = false;
+            var fromTimeTrades = GetTradesRequestStartTime();
+            var updatedPollTime = DateTime.UtcNow;
+            foreach (var symbol in _symbolTracker.GetTrackedSymbols())
+            {
+                var tradesResult = await _restClient.GetSpotUserTradesAsync(new GetUserTradesRequest(symbol, startTime: fromTimeTrades, exchangeParameters: _exchangeParameters)).ConfigureAwait(false);
+                if (!tradesResult.Success)
+                {
+                    anyError = true;
+
+                    _initialPollingError ??= tradesResult.Error;
+                    if (!_firstPollDone)
+                        break;
+                }
+                else
+                {
+
+                    // Filter trades to only include where timestamp is after the start time OR it's part of an order we're tracking
+                    var relevantTrades = tradesResult.Data.Where(x => x.Timestamp >= _startTime || (GetTrackedOrderIds?.Invoke() ?? []).Any(o => o == x.OrderId)).ToArray();
+                    if (relevantTrades.Length > 0)
+                        await HandleUpdateAsync(UpdateSource.Poll, tradesResult.Data).ConfigureAwait(false);
+                }
+            }
+
+            if (!anyError)
+            {
+                _lastDataTimeBeforeDisconnect = null;
+                _lastPollTime = updatedPollTime;
+            }
+
+            return anyError;
+        }
+
+        private DateTime? GetTradesRequestStartTime()
+        {
+            // Determine the timestamp from which we need to request trades from
+            // Use the timestamp we last know the correct state of the data
+            DateTime? fromTime = null;
+            string? source = null;
+
+            // Use the last timestamp we we received data from the websocket as state should be correct at that time. 
+            if (_lastDataTimeBeforeDisconnect.HasValue && (fromTime == null || fromTime > _lastDataTimeBeforeDisconnect.Value))
+            {
+                fromTime = _lastDataTimeBeforeDisconnect.Value.Add(-_pollOverlapPeriod);
+                source = "LastDataTimeBeforeDisconnect";
+            }
+
+            // If we've previously polled use that timestamp to request data from
+            if (_lastPollTime.HasValue && (fromTime == null || _lastPollTime.Value > fromTime))
+            {
+                fromTime = _lastPollTime.Value.Add(-_pollOverlapPeriod);
+                source = "LastPollTime";
+            }
+            
+            if (fromTime == null)
+            {
+                fromTime = _startTime;
+                source = "StartTime";
+            }
+
+            if (DateTime.UtcNow - fromTime < TimeSpan.FromSeconds(5))
+            {
+                // Set it to at least 5 seconds in the past to prevent issues when local time isn't in sync
+                fromTime = DateTime.UtcNow.AddSeconds(-5);
+            }
+
+            _logger.LogTrace("{DataType} UserDataTracker poll startTime filter based on {Source}: {Time:yyyy-MM-dd HH:mm:ss.fff}", DataType, source, fromTime);
+            return fromTime!.Value;
+        }
+
+        /// <inheritdoc />
+        protected override Task<CallResult<UpdateSubscription?>> DoSubscribeAsync(string? listenKey)
+        {
+            if (_socketClient == null)
+                return Task.FromResult(new CallResult<UpdateSubscription?>(data: null));
+
+            return ExchangeHelpers.ProcessQueuedAsync<SharedUserTrade[]>(
+                async handler => await _socketClient.SubscribeToUserTradeUpdatesAsync(new SubscribeUserTradeRequest(listenKey, exchangeParameters: _exchangeParameters), handler, ct: _cts!.Token).ConfigureAwait(false),
+                x => HandleUpdateAsync(UpdateSource.Push, x.Data))!;
+        }
+
+    }
+}

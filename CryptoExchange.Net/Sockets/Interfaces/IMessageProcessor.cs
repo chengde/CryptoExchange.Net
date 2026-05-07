@@ -1,6 +1,7 @@
 ﻿using CryptoExchange.Net.Interfaces;
 using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Sockets.Default;
+using CryptoExchange.Net.Sockets.Default.Routing;
 using System;
 
 namespace CryptoExchange.Net.Sockets.Interfaces
@@ -15,27 +16,16 @@ namespace CryptoExchange.Net.Sockets.Interfaces
         /// </summary>
         public int Id { get; }
         /// <summary>
-        /// The matcher for this listener
-        /// </summary>
-        public MessageMatcher MessageMatcher { get; }
-        /// <summary>
         /// The message router for this processor
         /// </summary>
         public MessageRouter MessageRouter { get; }
         /// <summary>
-        /// Handle a message
+        /// Event when the message router for this processor has been changed
         /// </summary>
-        CallResult Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object result, MessageHandlerLink matchedHandler);
+        public event Action? OnMessageRouterUpdated;
         /// <summary>
         /// Handle a message
         /// </summary>
-        CallResult? Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object result, MessageRoute route);
-        /// <summary>
-        /// Deserialize a message into object of type
-        /// </summary>
-        /// <param name="accessor"></param>
-        /// <param name="type"></param>
-        /// <returns></returns>
-        CallResult<object> Deserialize(IMessageAccessor accessor, Type type);
+        bool Handle(string typeIdentifier, string? topicFilter, SocketConnection socketConnection, DateTime receiveTime, string? originalData, object result);
     }
 }

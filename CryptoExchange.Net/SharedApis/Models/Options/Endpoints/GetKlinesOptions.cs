@@ -18,15 +18,12 @@ namespace CryptoExchange.Net.SharedApis
         /// Max number of data points which can be requested
         /// </summary>
         public int? MaxTotalDataPoints { get; set; }
-        /// <summary>
-        /// The max age of the data that can be requested
-        /// </summary>
-        public TimeSpan? MaxAge { get; set; }
 
         /// <summary>
         /// ctor
         /// </summary>
-        public GetKlinesOptions(SharedPaginationSupport paginationType, bool timeFilterSupported, int maxLimit, bool needsAuthentication) : base(paginationType, timeFilterSupported, maxLimit, needsAuthentication)
+        public GetKlinesOptions(bool supportsAscending, bool supportsDescending, bool timeFilterSupported, int maxLimit, bool needsAuthentication)
+            : base(supportsAscending, supportsDescending, timeFilterSupported, maxLimit, needsAuthentication)
         {
             SupportIntervals = new[]
             {
@@ -50,7 +47,8 @@ namespace CryptoExchange.Net.SharedApis
         /// <summary>
         /// ctor
         /// </summary>
-        public GetKlinesOptions(SharedPaginationSupport paginationType, bool timeFilterSupported, int maxLimit, bool needsAuthentication, params SharedKlineInterval[] intervals) : base(paginationType, timeFilterSupported, maxLimit, needsAuthentication)
+        public GetKlinesOptions(bool supportsAscending, bool supportsDescending, bool timeFilterSupported, int maxLimit, bool needsAuthentication, params SharedKlineInterval[] intervals) 
+            : base(supportsAscending, supportsDescending, timeFilterSupported, maxLimit, needsAuthentication)
         {
             SupportIntervals = intervals;
         }
@@ -68,11 +66,28 @@ namespace CryptoExchange.Net.SharedApis
             if (!IsSupported(request.Interval))
                 return ArgumentError.Invalid(nameof(GetKlinesRequest.Interval), "Interval not supported");
 
+            if (!SupportsAscending && request.Direction == DataDirection.Ascending)
+                return ArgumentError.Invalid(nameof(GetWithdrawalsRequest.Direction), $"Ascending direction is not supported");
+
+            if (!SupportsDescending && request.Direction == DataDirection.Descending)
+                return ArgumentError.Invalid(nameof(GetWithdrawalsRequest.Direction), $"Descending direction is not supported");
+
             if (MaxAge.HasValue && request.StartTime < DateTime.UtcNow.Add(-MaxAge.Value))
                 return ArgumentError.Invalid(nameof(GetKlinesRequest.StartTime), $"Only the most recent {MaxAge} klines are available");
 
             if (request.Limit > MaxLimit)
                 return ArgumentError.Invalid(nameof(GetKlinesRequest.Limit), $"Only {MaxLimit} klines can be retrieved per request");
+
+            if (!TimePeriodFilterSupport)
+            {
+                // When going descending we can still allow startTime filter to limit the results
+                var now = DateTime.UtcNow;
+                if ((request.Direction == DataDirection.Ascending && request.StartTime != null)
+                    || (request.EndTime != null && now - request.EndTime > TimeSpan.FromSeconds(5)))
+                {
+                    return ArgumentError.Invalid(nameof(GetDepositsRequest.StartTime), $"Time filter is not supported");
+                }
+            }
 
             if (MaxTotalDataPoints.HasValue)
             {
@@ -93,6 +108,7 @@ namespace CryptoExchange.Net.SharedApis
         public override string ToString(string exchange)
         {
             var sb = new StringBuilder(base.ToString(exchange));
+            sb.AppendLine($"Time filter supported: {TimePeriodFilterSupport}");
             sb.AppendLine($"Supported SharedKlineInterval values: {string.Join(", ", SupportIntervals)}");
             if (MaxAge != null)
                 sb.AppendLine($"Max age of data: {MaxAge}");

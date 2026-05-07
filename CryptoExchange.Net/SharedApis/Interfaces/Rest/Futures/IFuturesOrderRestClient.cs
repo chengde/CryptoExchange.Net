@@ -73,14 +73,14 @@ namespace CryptoExchange.Net.SharedApis
         /// <summary>
         /// Spot get closed orders request options
         /// </summary>
-        PaginatedEndpointOptions<GetClosedOrdersRequest> GetClosedFuturesOrdersOptions { get; }
+        GetClosedOrdersOptions GetClosedFuturesOrdersOptions { get; }
         /// <summary>
         /// Get info on closed futures orders
         /// </summary>
         /// <param name="request">Request info</param>
-        /// <param name="nextPageToken">The pagination token from the previous request to continue pagination</param>
+        /// <param name="nextPageToken">The pagination request from the previous request result `NextPageRequest` property to continue pagination</param>
         /// <param name="ct">Cancellation token</param>
-        Task<ExchangeWebResult<SharedFuturesOrder[]>> GetClosedFuturesOrdersAsync(GetClosedOrdersRequest request, INextPageToken? nextPageToken = null, CancellationToken ct = default);
+        Task<ExchangeWebResult<SharedFuturesOrder[]>> GetClosedFuturesOrdersAsync(GetClosedOrdersRequest request, PageRequest? nextPageToken = null, CancellationToken ct = default);
 
         /// <summary>
         /// Futures get order trades request options
@@ -96,14 +96,14 @@ namespace CryptoExchange.Net.SharedApis
         /// <summary>
         /// Futures user trades request options
         /// </summary>
-        PaginatedEndpointOptions<GetUserTradesRequest> GetFuturesUserTradesOptions { get; }
+        GetUserTradesOptions GetFuturesUserTradesOptions { get; }
         /// <summary>
         /// Get futures user trade records
         /// </summary>
         /// <param name="request">Request info</param>
-        /// <param name="nextPageToken">The pagination token from the previous request to continue pagination</param>
+        /// <param name="nextPageToken">The pagination request from the previous request result `NextPageRequest` property to continue pagination</param>
         /// <param name="ct">Cancellation token</param>
-        Task<ExchangeWebResult<SharedUserTrade[]>> GetFuturesUserTradesAsync(GetUserTradesRequest request, INextPageToken? nextPageToken = null, CancellationToken ct = default);
+        Task<ExchangeWebResult<SharedUserTrade[]>> GetFuturesUserTradesAsync(GetUserTradesRequest request, PageRequest? nextPageToken = null, CancellationToken ct = default);
 
         /// <summary>
         /// Futures cancel order request options

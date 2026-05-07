@@ -5,11 +5,12 @@ using CryptoExchange.Net.Logging.Extensions;
 using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Objects.Sockets;
 using CryptoExchange.Net.Sockets.Default.Interfaces;
+using CryptoExchange.Net.Sockets.Default.Routing;
 using CryptoExchange.Net.Sockets.Interfaces;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
@@ -112,11 +113,6 @@ namespace CryptoExchange.Net.Sockets.Default
         public event Action? ActivityUnpaused;
 
         /// <summary>
-        /// Unhandled message event
-        /// </summary>
-        public event Action<IMessageAccessor>? UnhandledMessage;
-
-        /// <summary>
         /// Connection was rate limited and couldn't be established
         /// </summary>
         public Func<Task>? ConnectRateLimitedAsync;
@@ -128,8 +124,7 @@ namespace CryptoExchange.Net.Sockets.Default
         {
             get
             {
-                lock (_listenersLock)
-                    return _listeners.OfType<Subscription>().Count(h => h.UserSubscription);
+                return _listeners.OfType<Subscription>().Count(h => h.UserSubscription);
             }
         }
 
@@ -140,8 +135,7 @@ namespace CryptoExchange.Net.Sockets.Default
         {
             get
             {
-                lock (_listenersLock)
-                    return _listeners.OfType<Subscription>().Where(h => h.UserSubscription).ToArray();
+                return _listeners.OfType<Subscription>().Where(h => h.UserSubscription).ToArray();
             }
         }
 
@@ -182,6 +176,11 @@ namespace CryptoExchange.Net.Sockets.Default
         /// Time of disconnecting
         /// </summary>
         public DateTime? DisconnectTime { get; set; }
+
+        /// <summary>
+        /// Last timestamp something was received from the server
+        /// </summary>
+        public DateTime? LastReceiveTime => _socket.LastReceiveTime;
 
         /// <summary>
         /// Tag for identification
@@ -240,8 +239,7 @@ namespace CryptoExchange.Net.Sockets.Default
         {
             get
             {
-                lock (_listenersLock)
-                    return _listeners.OfType<Subscription>().Select(x => x.Topic).Where(t => t != null).ToArray()!;
+                return _listeners.OfType<Subscription>().Select(x => x.Topic).Where(t => t != null).ToArray()!;
             }
         }
 
@@ -252,10 +250,10 @@ namespace CryptoExchange.Net.Sockets.Default
         {
             get
             {
-                lock (_listenersLock)
-                    return _listeners.OfType<Query>().Where(x => !x.Completed).Count();
+                return _listeners.OfType<Query>().Where(x => !x.Completed).Count();
             }
         }
+
 
         private bool _pausedActivity;
 #if NET9_0_OR_GREATER
@@ -263,16 +261,19 @@ namespace CryptoExchange.Net.Sockets.Default
 #else
         private readonly object _listenersLock = new object();
 #endif
-        private readonly List<IMessageProcessor> _listeners;
+
+        private RoutingTable _routingTable = new RoutingTable();
+
+        private ReadOnlyCollection<IMessageProcessor> _listeners;
         private readonly ILogger _logger;
         private SocketStatus _status;
 
         private readonly IMessageSerializer _serializer;
-        private IByteMessageAccessor? _stringMessageAccessor;
-        private IByteMessageAccessor? _byteMessageAccessor;
 
         private ISocketMessageHandler? _byteMessageConverter;
         private ISocketMessageHandler? _textMessageConverter;
+
+        private long _lastSequenceNumber;
 
         /// <summary>
         /// The task that is sending periodic data on the websocket. Can be used for sending Ping messages every x seconds or similar. Not necessary.
@@ -288,12 +289,7 @@ namespace CryptoExchange.Net.Sockets.Default
         /// The underlying websocket
         /// </summary>
         private readonly IWebsocket _socket;
-
-        /// <summary>
-        /// Cache for deserialization, only caches for a single message
-        /// </summary>
-        private readonly Dictionary<Type, object> _deserializationCache = new Dictionary<Type, object>();
-
+        
         /// <summary>
         /// New socket connection
         /// </summary>
@@ -307,7 +303,6 @@ namespace CryptoExchange.Net.Sockets.Default
             _socket = socketFactory.CreateWebsocket(logger, this, parameters);
             _logger.SocketCreatedForAddress(_socket.Id, parameters.Uri.ToString());
 
-            _socket.OnStreamMessage += HandleStreamMessage;
             _socket.OnRequestSent += HandleRequestSentAsync;
             _socket.OnRequestRateLimited += HandleRequestRateLimitedAsync;
             _socket.OnConnectRateLimited += HandleConnectRateLimitedAsync;
@@ -318,7 +313,7 @@ namespace CryptoExchange.Net.Sockets.Default
             _socket.OnError += HandleErrorAsync;
             _socket.GetReconnectionUrl = GetReconnectionUrlAsync;
 
-            _listeners = new List<IMessageProcessor>();
+            _listeners = new ReadOnlyCollection<IMessageProcessor>([]);
 
             _serializer = apiClient.CreateSerializer();
         }
@@ -340,24 +335,22 @@ namespace CryptoExchange.Net.Sockets.Default
         {
             Status = SocketStatus.Closed;
             Authenticated = false;
+            _lastSequenceNumber = 0;
 
             if (ApiClient._socketConnections.ContainsKey(SocketId))
                 ApiClient._socketConnections.TryRemove(SocketId, out _);
 
-            lock (_listenersLock)
+            foreach (var subscription in _listeners.OfType<Subscription>().Where(l => l.UserSubscription && !l.IsClosingConnection))
             {
-                foreach (var subscription in _listeners.OfType<Subscription>().Where(l => l.UserSubscription && !l.IsClosingConnection))
-                {
-                    subscription.IsClosingConnection = true;
-                    subscription.Reset();
-                }
-
-                foreach (var query in _listeners.OfType<Query>().ToList())
-                {
-                    query.Fail(new WebError("Connection interrupted"));
-                    _listeners.Remove(query);
-                }
+                subscription.IsClosingConnection = true;
+                subscription.Reset();
             }
+
+            var queryList = _listeners.OfType<Query>().ToList();
+            foreach (var query in queryList)            
+                query.Fail(new WebError("Connection interrupted"));            
+
+            RemoveMessageProcessors(queryList);
 
             _ = Task.Run(() => ConnectionClosed?.Invoke());
             return Task.CompletedTask;
@@ -371,18 +364,16 @@ namespace CryptoExchange.Net.Sockets.Default
             Status = SocketStatus.Reconnecting;
             DisconnectTime = DateTime.UtcNow;
             Authenticated = false;
+            _lastSequenceNumber = 0;
 
-            lock (_listenersLock)
-            {
-                foreach (var subscription in _listeners.OfType<Subscription>().Where(l => l.UserSubscription))
-                    subscription.Reset();
+            foreach (var subscription in _listeners.OfType<Subscription>().Where(l => l.UserSubscription))
+                subscription.Reset();
 
-                foreach (var query in _listeners.OfType<Query>().ToList())
-                {
-                    query.Fail(new WebError("Connection interrupted"));
-                    _listeners.Remove(query);
-                }
-            }
+            var queryList = _listeners.OfType<Query>().ToList();
+            foreach (var query in queryList)
+                query.Fail(new WebError("Connection interrupted"));
+
+            RemoveMessageProcessors(queryList);
 
             _ = Task.Run(() => ConnectionLost?.Invoke());
             return Task.CompletedTask;
@@ -404,14 +395,11 @@ namespace CryptoExchange.Net.Sockets.Default
         {
             Status = SocketStatus.Resubscribing;
 
-            lock (_listenersLock)
-            {
-                foreach (var query in _listeners.OfType<Query>().ToList())
-                {
-                    query.Fail(new WebError("Connection interrupted"));
-                    _listeners.Remove(query);
-                }
-            }
+            var queryList = _listeners.OfType<Query>().ToList();
+            foreach (var query in queryList)            
+                query.Fail(new WebError("Connection interrupted"));
+            
+            RemoveMessageProcessors(queryList);
 
             // Can't wait for this as it would cause a deadlock
             _ = Task.Run(async () =>
@@ -466,12 +454,7 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <returns></returns>
         protected virtual Task HandleRequestRateLimitedAsync(int requestId)
         {
-            Query? query;
-            lock (_listenersLock)
-            {
-                query = _listeners.OfType<Query>().FirstOrDefault(x => x.Id == requestId);
-            }
-
+            var query = _listeners.OfType<Query>().FirstOrDefault(x => x.Id == requestId);
             if (query == null)
                 return Task.CompletedTask;
 
@@ -495,12 +478,7 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <param name="requestId">Id of the request sent</param>
         protected virtual Task HandleRequestSentAsync(int requestId)
         {
-            Query? query;
-            lock (_listenersLock)
-            {
-                query = _listeners.OfType<Query>().FirstOrDefault(x => x.Id == requestId);
-            }
-
+            var query = _listeners.OfType<Query>().FirstOrDefault(x => x.Id == requestId);
             if (query == null)
                 return Task.CompletedTask;
 
@@ -513,6 +491,14 @@ namespace CryptoExchange.Net.Sockets.Default
         /// </summary>
         protected internal virtual void HandleStreamMessage2(WebSocketMessageType type, ReadOnlySpan<byte> data)
         {
+            // Forward message rules:
+            // | Message Topic | Route Topic Filter | Topics Match | Forward | Description
+            // |       N       |          N         |      -       |    Y    | No topic filter applied
+            // |       N       |          Y         |      -       |    N    | Route only listens to specific topic
+            // |       Y       |          N         |      -       |    Y    | Route listens to all message regardless of topic
+            // |       Y       |          Y         |      Y       |    Y    | Route listens to specific message topic
+            // |       Y       |          Y         |      N       |    N    | Route listens to different topic
+
             var receiveTime = DateTime.UtcNow;
 
             // 1. Decrypt/Preprocess if necessary
@@ -545,37 +531,22 @@ namespace CryptoExchange.Net.Sockets.Default
                 return;
             }
 
-            Type? deserializationType = null;
-            lock (_listenersLock)
+            var routingEntry = _routingTable.GetRouteTableEntry(typeIdentifier);
+            if (routingEntry == null)
             {
-                foreach (var subscription in _listeners)
+                if (!ApiClient.HandleUnhandledMessage(this, typeIdentifier, data))
                 {
-                    foreach (var route in subscription.MessageRouter.Routes)
-                    {
-                        if (!route.TypeIdentifier.Equals(typeIdentifier, StringComparison.Ordinal))
-                            continue;
-
-                        deserializationType = route.DeserializationType;
-                        break;
-                    }
-
-                    if (deserializationType != null)
-                        break;
+                    // No handler found for identifier either, can't process
+                    _logger.LogWarning("Failed to determine message type for identifier {Identifier}. Data: {Message}", typeIdentifier, Encoding.UTF8.GetString(data.ToArray()));
                 }
-            }
 
-            if (deserializationType == null)
-            {
-                // No handler found for identifier either, can't process
-                _logger.LogWarning("Failed to determine message type for identifier {Identifier}. Data: {Message}", typeIdentifier, Encoding.UTF8.GetString(data.ToArray()));
                 return;
             }
-            
 
             object result;
             try
             {
-                if (deserializationType == typeof(string))
+                if (routingEntry.IsStringOutput)
                 {
 #if NETSTANDARD2_0
                     result = Encoding.UTF8.GetString(data.ToArray());
@@ -585,7 +556,7 @@ namespace CryptoExchange.Net.Sockets.Default
                 }
                 else
                 {
-                    result = messageConverter.Deserialize(data, deserializationType);
+                    result = messageConverter.Deserialize(data, routingEntry.DeserializationType);
                 }
             }
             catch(Exception ex)
@@ -602,201 +573,24 @@ namespace CryptoExchange.Net.Sockets.Default
             }
 
             var topicFilter = messageConverter.GetTopicFilter(result);
-
-            bool processed = false;
-            lock (_listenersLock)
+            var processed = false;
+            foreach (var handler in routingEntry.Handlers)
             {
-                var currentCount = _listeners.Count;
-                for(var i = 0; i < _listeners.Count; i++)
-                {
-                    if (_listeners.Count != currentCount)
-                    {
-                        // Possible a query added or removed. If added it's not a problem, if removed it is
-                        if (_listeners.Count < currentCount)
-                            throw new Exception("Listeners list adjusted, can't continue processing");                            
-                    }
-
-                    var processor = _listeners[i];
-                    bool isQuery = false;
-                    Query? query = null;
-                    if (processor is Query cquery)
-                    {
-                        isQuery = true;
-                        query = cquery;
-                    }
-
-                    var complete = false;
-
-                    foreach (var route in processor.MessageRouter.Routes)
-                    {
-                        if (route.TypeIdentifier != typeIdentifier)
-                            continue;
-
-                        if (topicFilter == null
-                            || route.TopicFilter == null 
-                            || route.TopicFilter.Equals(topicFilter, StringComparison.Ordinal))
-                        {
-                            if (isQuery && query!.Completed)
-                                continue;
-
-                            processed = true;
-                            processor.Handle(this, receiveTime, originalData, result, route);
-
-                            if (isQuery && !route.MultipleReaders)
-                            {
-                                complete = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (complete)
-                        break;
-                }
+                var thisHandled = handler.Handle(typeIdentifier, topicFilter, this, receiveTime, originalData, result);
+                if (thisHandled)
+                    processed = true;
             }
 
             if (!processed)
             {
-                _logger.ReceivedMessageNotMatchedToAnyListener(SocketId, topicFilter!,
-                    string.Join(",", _listeners.Select(x => string.Join(",", x.MessageRouter.Routes.Select(x => x.TopicFilter != null ? string.Join(",", x.TopicFilter) : "[null]")))));
-            }
-        }
-
-        /// <summary>
-        /// Handle a message
-        /// </summary>
-        protected virtual async Task HandleStreamMessage(WebSocketMessageType type, ReadOnlyMemory<byte> data)
-        {
-            var sw = Stopwatch.StartNew();
-            var receiveTime = DateTime.UtcNow;
-            string? originalData = null;
-
-            // 1. Decrypt/Preprocess if necessary
-            data = ApiClient.PreprocessStreamMessage(this, type, data);
-
-            // 2. Read data into accessor
-            IByteMessageAccessor accessor;
-            if (type == WebSocketMessageType.Binary)
-                accessor = _stringMessageAccessor ??= ApiClient.CreateAccessor(type);
-            else
-                accessor = _byteMessageAccessor ??= ApiClient.CreateAccessor(type);
-
-            var result = accessor.Read(data);
-            try
-            {
-                bool outputOriginalData = ApiClient.ApiOptions.OutputOriginalData ?? ApiClient.ClientOptions.OutputOriginalData;
-                if (outputOriginalData)
+                if (!ApiClient.HandleUnhandledMessage(this, typeIdentifier, data))
                 {
-                    originalData = accessor.GetOriginalString();
-                    _logger.ReceivedData(SocketId, originalData);
+                    _logger.ReceivedMessageNotMatchedToAnyListener(
+                        SocketId,
+                        typeIdentifier,
+                        topicFilter!,
+                        string.Join(",", _listeners.Select(x => string.Join(",", x.MessageRouter.Routes.Where(x => x.TypeIdentifier == typeIdentifier).Select(x => x.TopicFilter != null ? string.Join(",", x.TopicFilter) : "[null]")))));
                 }
-
-                if (!accessor.IsValid && !ApiClient.ProcessUnparsableMessages)
-                {
-                    _logger.FailedToParse(SocketId, result.Error!.Message ?? result.Error!.ErrorDescription!);
-                    return;
-                }
-
-                // 3. Determine the identifying properties of this message
-                var listenId = ApiClient.GetListenerIdentifier(accessor);
-                if (listenId == null)
-                {
-                    originalData ??= "[OutputOriginalData is false]";
-                    if (!ApiClient.UnhandledMessageExpected)
-                        _logger.FailedToEvaluateMessage(SocketId, originalData);
-
-                    UnhandledMessage?.Invoke(accessor);
-                    return;
-                }
-
-                bool processed = false;
-                var totalUserTime = 0;
-
-                List<IMessageProcessor> localListeners;
-                lock (_listenersLock)
-                    localListeners = _listeners.ToList();
-
-                foreach (var processor in localListeners)
-                {
-                    foreach (var listener in processor.MessageMatcher.GetHandlerLinks(listenId))
-                    {
-                        processed = true;
-                        _logger.ProcessorMatched(SocketId, listener.ToString(), listenId);
-
-                        // 4. Determine the type to deserialize to for this processor
-                        var messageType = listener.DeserializationType;
-                        if (messageType == null)
-                        {
-                            _logger.ReceivedMessageNotRecognized(SocketId, processor.Id);
-                            continue;
-                        }
-
-                        if (processor is Subscription subscriptionProcessor && subscriptionProcessor.Status == SubscriptionStatus.Subscribing)
-                        {
-                            // If this message is for this listener then it is automatically confirmed, even if the subscription is not (yet) confirmed
-                            subscriptionProcessor.Status = SubscriptionStatus.Subscribed;
-                            if (subscriptionProcessor.SubscriptionQuery?.TimeoutBehavior == TimeoutBehavior.Succeed)
-                                // If this subscription has a query waiting for a timeout (success if there is no error response)
-                                // then time it out now as the data is being received, so we assume it's successful
-                                subscriptionProcessor.SubscriptionQuery.Timeout();
-                        }
-
-                        // 5. Deserialize the message
-                        _deserializationCache.TryGetValue(messageType, out var deserialized);
-
-                        if (deserialized == null)
-                        {
-                            var desResult = processor.Deserialize(accessor, messageType);
-                            if (!desResult)
-                            {
-                                _logger.FailedToDeserializeMessage(SocketId, desResult.Error?.ToString(), desResult.Error?.Exception);
-                                continue;
-                            }
-
-                            deserialized = desResult.Data;
-                            _deserializationCache.Add(messageType, deserialized);
-                        }
-
-                        // 6. Pass the message to the handler
-                        try
-                        {
-                            var innerSw = Stopwatch.StartNew();
-                            processor.Handle(this, receiveTime, originalData, deserialized, listener);
-                            if (processor is Query query && query.RequiredResponses != 1)
-                                _logger.LogDebug($"[Sckt {SocketId}] [Req {query.Id}] responses: {query.CurrentResponses}/{query.RequiredResponses}");
-                            totalUserTime += (int)innerSw.ElapsedMilliseconds;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.UserMessageProcessingFailed(SocketId, ex.Message, ex);
-                            if (processor is Subscription subscription)
-                                subscription.InvokeExceptionHandler(ex);
-                        }
-
-                    }
-                }
-
-                if (!processed)
-                {
-                    if (!ApiClient.UnhandledMessageExpected)
-                    {
-                        List<string> listenerIds;
-                        lock (_listenersLock)
-                            listenerIds = _listeners.Select(l => l.MessageMatcher.ToString()).ToList();
-
-                        _logger.ReceivedMessageNotMatchedToAnyListener(SocketId, listenId, string.Join(",", listenerIds));
-                        UnhandledMessage?.Invoke(accessor);
-                    }
-
-                    return;
-                }
-
-                _logger.MessageProcessed(SocketId, sw.ElapsedMilliseconds, sw.ElapsedMilliseconds - totalUserTime);
-            }
-            finally
-            {
-                _deserializationCache.Clear();
-                accessor.Clear();
             }
         }
 
@@ -840,13 +634,10 @@ namespace CryptoExchange.Net.Sockets.Default
             if (ApiClient._socketConnections.ContainsKey(SocketId))
                 ApiClient._socketConnections.TryRemove(SocketId, out _);
 
-            lock (_listenersLock)
+            foreach (var subscription in _listeners.OfType<Subscription>())
             {
-                foreach (var subscription in _listeners.OfType<Subscription>())
-                {
-                    if (subscription.CancellationTokenRegistration.HasValue)
-                        subscription.CancellationTokenRegistration.Value.Dispose();
-                }
+                if (subscription.CancellationTokenRegistration.HasValue)
+                    subscription.CancellationTokenRegistration.Value.Dispose();
             }
 
             await _socket.CloseAsync().ConfigureAwait(false);
@@ -876,20 +667,12 @@ namespace CryptoExchange.Net.Sockets.Default
             if (subscription.CancellationTokenRegistration.HasValue)
                 subscription.CancellationTokenRegistration.Value.Dispose();
 
-            bool anyDuplicateSubscription;
-            lock (_listenersLock)
-                anyDuplicateSubscription = _listeners.OfType<Subscription>().Any(x => x != subscription && x.MessageMatcher.HandlerLinks.All(l => subscription.MessageMatcher.ContainsCheck(l)));
-
-            bool shouldCloseConnection;
-            lock (_listenersLock)
-                shouldCloseConnection = _listeners.OfType<Subscription>().All(r => !r.UserSubscription || r.Status == SubscriptionStatus.Closing || r.Status == SubscriptionStatus.Closed) && !DedicatedRequestConnection.IsDedicatedRequestConnection;
+            bool anyDuplicateSubscription = _listeners.OfType<Subscription>().Any(x => x != subscription && x.MessageRouter.Routes.All(l => subscription.MessageRouter.ContainsCheck(l)));
+            bool shouldCloseConnection = _listeners.OfType<Subscription>().All(r => !r.UserSubscription || r.Status == SubscriptionStatus.Closing || r.Status == SubscriptionStatus.Closed) && !DedicatedRequestConnection.IsDedicatedRequestConnection;
 
             if (!anyDuplicateSubscription)
             {
-                bool needUnsub;
-                lock (_listenersLock)
-                    needUnsub = _listeners.Contains(subscription) && !shouldCloseConnection;
-
+                var needUnsub = _listeners.Contains(subscription) && !shouldCloseConnection;
                 if (needUnsub && _socket.IsOpen)
                     await UnsubscribeAsync(subscription).ConfigureAwait(false);
             }
@@ -913,8 +696,7 @@ namespace CryptoExchange.Net.Sockets.Default
                 await CloseAsync().ConfigureAwait(false);
             }
 
-            lock (_listenersLock)
-                _listeners.Remove(subscription);
+            RemoveMessageProcessor(subscription);
 
             subscription.Status = SubscriptionStatus.Closed;
         }
@@ -926,15 +708,8 @@ namespace CryptoExchange.Net.Sockets.Default
         {
             Status = SocketStatus.Disposed;
             periodicEvent?.Set();
-            periodicEvent?.Dispose();
             _socket.Dispose();
         }
-
-        /// <summary>
-        /// Whether or not a new subscription can be added to this connection
-        /// </summary>
-        /// <returns></returns>
-        public bool CanAddSubscription() => Status == SocketStatus.None || Status == SocketStatus.Connected;
 
         /// <summary>
         /// Add a subscription to this connection
@@ -945,8 +720,7 @@ namespace CryptoExchange.Net.Sockets.Default
             if (Status != SocketStatus.None && Status != SocketStatus.Connected)
                 return false;
 
-            lock (_listenersLock)
-                _listeners.Add(subscription);
+            AddMessageProcessor(subscription);
 
             if (subscription.UserSubscription)
                 _logger.AddingNewSubscription(SocketId, subscription.Id, UserSubscriptionCount);
@@ -959,8 +733,7 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <param name="id"></param>
         public Subscription? GetSubscription(int id)
         {
-            lock (_listenersLock)
-                return _listeners.OfType<Subscription>().SingleOrDefault(s => s.Id == id);
+            return _listeners.OfType<Subscription>().SingleOrDefault(s => s.Id == id);
         }
 
         /// <summary>
@@ -1008,15 +781,12 @@ namespace CryptoExchange.Net.Sockets.Default
 
         private async Task SendAndWaitIntAsync(Query query, CancellationToken ct = default)
         {
-            lock (_listenersLock)
-                _listeners.Add(query);
-
+            AddMessageProcessor(query);
             var sendResult = await SendAsync(query.Id, query.Request, query.Weight).ConfigureAwait(false);
             if (!sendResult)
             {
                 query.Fail(sendResult.Error!);
-                lock (_listenersLock)
-                    _listeners.Remove(query);
+                RemoveMessageProcessor(query);
                 return;
             }
 
@@ -1047,8 +817,7 @@ namespace CryptoExchange.Net.Sockets.Default
             }
             finally
             {
-                lock (_listenersLock)
-                    _listeners.Remove(query);
+                RemoveMessageProcessor(query);
             }
         }
 
@@ -1071,7 +840,7 @@ namespace CryptoExchange.Net.Sockets.Default
                     return SendStringAsync(requestId, str, weight);
 
                 str = stringSerializer.Serialize(obj);
-                return SendAsync(requestId, str, weight);
+                return SendStringAsync(requestId, str, weight);
             }
 
             throw new Exception("Unknown serializer when sending message");
@@ -1154,9 +923,7 @@ namespace CryptoExchange.Net.Sockets.Default
 
             if (!DedicatedRequestConnection.IsDedicatedRequestConnection)
             {
-                bool anySubscriptions;
-                lock (_listenersLock)
-                    anySubscriptions = _listeners.OfType<Subscription>().Any(s => s.UserSubscription);
+                var anySubscriptions = _listeners.OfType<Subscription>().Any(s => s.UserSubscription);
                 if (!anySubscriptions)
                 {
                     // No need to resubscribe anything
@@ -1166,13 +933,8 @@ namespace CryptoExchange.Net.Sockets.Default
                 }
             }
 
-            bool anyAuthenticated;
-            lock (_listenersLock)
-            {
-                anyAuthenticated = _listeners.OfType<Subscription>().Any(s => s.Authenticated)
+            bool anyAuthenticated = _listeners.OfType<Subscription>().Any(s => s.Authenticated)
                     || DedicatedRequestConnection.IsDedicatedRequestConnection && DedicatedRequestConnection.Authenticated;
-            }
-
             if (anyAuthenticated)
             {
                 // If we reconnected a authenticated connection we need to re-authenticate
@@ -1195,43 +957,15 @@ namespace CryptoExchange.Net.Sockets.Default
                 if (!_socket.IsOpen)
                     return new CallResult(new WebError("Socket not connected"));
 
-                List<Subscription> subList;
-                lock (_listenersLock)
-                    subList = _listeners.OfType<Subscription>().Where(x => x.Active).Skip(batch * batchSize).Take(batchSize).ToList();
-
+                var subList = _listeners.OfType<Subscription>().Where(x => x.Active).Skip(batch * batchSize).Take(batchSize).ToList();
                 if (subList.Count == 0)
                     break;
 
                 var taskList = new List<Task<CallResult>>();
                 foreach (var subscription in subList)
                 {
-                    subscription.ConnectionInvocations = 0;
-                    if (!subscription.Active)
-                        // Can be closed during resubscribing
-                        continue;
-
-                    subscription.Status = SubscriptionStatus.Subscribing;
-                    var result = await ApiClient.RevitalizeRequestAsync(subscription).ConfigureAwait(false);
-                    if (!result)
-                    {
-                        _logger.FailedRequestRevitalization(SocketId, result.Error?.ToString());
-                        subscription.Status = SubscriptionStatus.Pending;
-                        return result;
-                    }
-
-                    var subQuery = subscription.CreateSubscriptionQuery(this);
-                    if (subQuery == null)
-                    {
-                        subscription.Status = SubscriptionStatus.Subscribed;
-                        continue;
-                    }
-                    subQuery.OnComplete = () =>
-                    {
-                        subscription.Status = subQuery.Result!.Success ? SubscriptionStatus.Subscribed : SubscriptionStatus.Pending;
-                        subscription.HandleSubQueryResponse(subQuery.Response);
-                    };
-
-                    taskList.Add(SendAndWaitQueryAsync(subQuery));
+                    var subscribeTask = TrySubscribeAsync(subscription, false, default);
+                    taskList.Add(subscribeTask);
                 }
 
                 await Task.WhenAll(taskList).ConfigureAwait(false);
@@ -1248,6 +982,71 @@ namespace CryptoExchange.Net.Sockets.Default
             return CallResult.SuccessResult;
         }
 
+        /// <summary>
+        /// Try to subscribe a new subscription by sending the subscribe query and wait for the result as needed
+        /// </summary>
+        /// <param name="subscription">The subscription</param>
+        /// <param name="newSubscription">Whether this is a new subscription, or an existing subscription (resubscribing on reconnected socket)</param>
+        /// <param name="subCancelToken">Cancellation token</param>
+        protected internal async Task<CallResult> TrySubscribeAsync(Subscription subscription, bool newSubscription, CancellationToken subCancelToken)
+        {
+            subscription.ConnectionInvocations = 0;
+
+            if (!newSubscription)
+            {
+                if (!subscription.Active)
+                    // Can be closed during resubscribing
+                    return CallResult.SuccessResult;
+
+                var result = await ApiClient.RevitalizeRequestAsync(subscription).ConfigureAwait(false);
+                if (!result)
+                {
+                    _logger.FailedRequestRevitalization(SocketId, result.Error?.ToString());
+                    subscription.Status = SubscriptionStatus.Pending;
+                    return result;
+                }
+            }
+
+            subscription.Status = SubscriptionStatus.Subscribing;
+            var subQuery = subscription.CreateSubscriptionQuery(this);
+            if (subQuery == null)
+            {
+                // No sub query, so successful
+                subscription.Status = SubscriptionStatus.Subscribed;
+                return CallResult.SuccessResult;
+            }
+
+            var subCompleteHandler = () =>
+            {
+                subscription.Status = subQuery.Result!.Success ? SubscriptionStatus.Subscribed : SubscriptionStatus.Pending;
+                subscription.HandleSubQueryResponse(this, subQuery.Response);
+                if (newSubscription && subQuery.Result.Success && subCancelToken != default)
+                {
+                    subscription.CancellationTokenRegistration = subCancelToken.Register(async () =>
+                    {
+                        _logger.CancellationTokenSetClosingSubscription(SocketId, subscription.Id);
+                        await CloseAsync(subscription).ConfigureAwait(false);
+                    }, false);
+                }
+            };
+            subQuery.OnComplete = subCompleteHandler;
+
+            var subQueryResult = await SendAndWaitQueryAsync(subQuery).ConfigureAwait(false);
+            if (!subQueryResult)
+            {
+                _logger.FailedToSubscribe(SocketId, subQueryResult.Error?.ToString());
+                // If this was a server process error or timeout we still send an unsubscribe to prevent messages coming in later
+                if (newSubscription)
+                    await CloseAsync(subscription).ConfigureAwait(false);
+                return new CallResult<UpdateSubscription>(subQueryResult.Error!);
+            }
+
+            if (!subQuery.ExpectsResponse)
+                subCompleteHandler();
+
+            return subQueryResult;
+        }
+
         internal async Task UnsubscribeAsync(Subscription subscription)
         {
             var unsubscribeRequest = subscription.CreateUnsubscriptionQuery(this);
@@ -1255,6 +1054,7 @@ namespace CryptoExchange.Net.Sockets.Default
                 return;
 
             await SendAndWaitQueryAsync(unsubscribeRequest).ConfigureAwait(false);
+            subscription.HandleUnsubQueryResponse(this, unsubscribeRequest.Response);
             _logger.SubscriptionUnsubscribed(SocketId, subscription.Id);
         }
 
@@ -1268,8 +1068,26 @@ namespace CryptoExchange.Net.Sockets.Default
                 return CallResult.SuccessResult;
 
             var result = await SendAndWaitQueryAsync(subQuery).ConfigureAwait(false);
-            subscription.HandleSubQueryResponse(subQuery.Response!);
+            subscription.HandleSubQueryResponse(this, subQuery.Response);
             return result;
+        }
+
+        /// <summary>
+        /// Update the sequence number for this connection
+        /// </summary>
+        public void UpdateSequenceNumber(long sequenceNumber)
+        {
+            if (ApiClient.EnforceSequenceNumbers
+                && _lastSequenceNumber != 0 // Initial value is 0
+                && _lastSequenceNumber != sequenceNumber // When there are multiple listeners for the same message it's possible this gets recorded multiple times, shouldn't be an issue
+                && _lastSequenceNumber + 1 != sequenceNumber) // Expected value
+            {
+                // Not sequential
+                _logger.LogWarning("[Sckt {SocketId}] update not in sequence. Last recorded sequence number: {LastSequence}, update sequence number: {UpdateSequence}. Reconnecting", SocketId, _lastSequenceNumber, sequenceNumber);
+                _ = TriggerReconnectAsync();
+            }
+
+            _lastSequenceNumber = sequenceNumber;
         }
 
         /// <summary>
@@ -1321,6 +1139,69 @@ namespace CryptoExchange.Net.Sockets.Default
             });
         }
 
+        private void UpdateRoutingTable()
+        {
+            _routingTable.Update(_listeners);
+        }
+
+        private void AddMessageProcessor(IMessageProcessor processor)
+        {
+            lock (_listenersLock)
+            {
+                var updatedList = new List<IMessageProcessor>(_listeners);
+                updatedList.Add(processor);
+                processor.OnMessageRouterUpdated += UpdateRoutingTable;
+                _listeners = updatedList.AsReadOnly();
+                if (processor.MessageRouter.Routes.Length > 0)
+                {
+                    UpdateRoutingTable();
+#if DEBUG
+                    _logger.LogTrace("Processor added, new routing table:\r\n" + _routingTable.ToString());
+#endif
+                }
+            }
+        }
+
+        private void RemoveMessageProcessor(IMessageProcessor processor)
+        {
+            lock (_listenersLock)
+            {
+                var updatedList = new List<IMessageProcessor>(_listeners);
+                processor.OnMessageRouterUpdated -= UpdateRoutingTable;
+                if (!updatedList.Remove(processor))
+                    return; // If nothing removed nothing has changed
+
+                _listeners = updatedList.AsReadOnly();
+                UpdateRoutingTable();
+#if DEBUG
+                _logger.LogTrace("Processor removed, new routing table:\r\n" + _routingTable.ToString());
+#endif
+            }
+        }
+
+        private void RemoveMessageProcessors(IEnumerable<IMessageProcessor> processors)
+        {
+            lock (_listenersLock)
+            {
+                var updatedList = new List<IMessageProcessor>(_listeners);
+                var anyRemoved = false;
+                foreach (var processor in processors)
+                {
+                    processor.OnMessageRouterUpdated -= UpdateRoutingTable;
+                    if (updatedList.Remove(processor))
+                        anyRemoved = true;
+                }
+
+                if (!anyRemoved)
+                    return; // If nothing removed nothing has changed
+
+                _listeners = updatedList.AsReadOnly();
+                UpdateRoutingTable();
+#if DEBUG
+                _logger.LogTrace("Processors removed, new routing table:\r\n" + _routingTable.ToString());
+#endif
+            }
+        }
     }
 }
 

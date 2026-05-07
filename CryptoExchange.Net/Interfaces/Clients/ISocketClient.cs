@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using CryptoExchange.Net.Authentication;
 using CryptoExchange.Net.Objects.Options;
 using CryptoExchange.Net.Objects.Sockets;
 
@@ -8,7 +9,7 @@ namespace CryptoExchange.Net.Interfaces.Clients
     /// <summary>
     /// Base class for socket API implementations
     /// </summary>
-    public interface ISocketClient: IDisposable
+    public interface ISocketClient : IDisposable
     {
         /// <summary>
         /// The exchange name
@@ -36,6 +37,11 @@ namespace CryptoExchange.Net.Interfaces.Clients
         public int CurrentSubscriptions { get; }
 
         /// <summary>
+        /// Whether client is disposed
+        /// </summary>
+        bool Disposed { get; }
+
+        /// <summary>
         /// Unsubscribe from a stream using the subscription id received when starting the subscription
         /// </summary>
         /// <param name="subscriptionId">The id of the subscription to unsubscribe</param>
@@ -54,5 +60,28 @@ namespace CryptoExchange.Net.Interfaces.Clients
         /// </summary>
         /// <returns></returns>
         Task UnsubscribeAllAsync();
+
+        /// <summary>
+        /// Update specific options
+        /// </summary>
+        /// <param name="options">Options to update. Only specific options are changeable after the client has been created</param>
+        void SetOptions(UpdateOptions options);
+    }
+
+    /// <inheritdoc />
+    public interface ISocketClient<TApiCredentials> : ISocketClient where TApiCredentials : ApiCredentials
+    {
+
+        /// <summary>
+        /// Set the API credentials for this client. All Api clients in this client will use the new credentials, regardless of earlier set options.
+        /// </summary>
+        /// <param name="credentials">The credentials to set</param>
+        void SetApiCredentials(TApiCredentials credentials);
+
+        /// <summary>
+        /// Update specific options
+        /// </summary>
+        /// <param name="options">Options to update. Only specific options are changeable after the client has been created</param>
+        void SetOptions(UpdateOptions<TApiCredentials> options);
     }
 }

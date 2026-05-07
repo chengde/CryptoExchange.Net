@@ -1,6 +1,7 @@
 ﻿using CryptoExchange.Net.Interfaces;
 using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Sockets.Default;
+using CryptoExchange.Net.Sockets.Default.Routing;
 using CryptoExchange.Net.Sockets.Interfaces;
 using System;
 using System.Threading;
@@ -59,15 +60,20 @@ namespace CryptoExchange.Net.Sockets
         /// </summary>
         public object? Response { get; set; }
 
-        /// <summary>
-        /// Matcher for this query
-        /// </summary>
-        public MessageMatcher MessageMatcher { get; set; }
-
+        private MessageRouter _router;
         /// <summary>
         /// Router for this query
         /// </summary>
-        public MessageRouter MessageRouter { get; set; }
+        public MessageRouter MessageRouter
+        {
+            get => _router;
+            set
+            {
+                _router = value;
+                _router.BuildQueryRouter();
+                OnMessageRouterUpdated?.Invoke();
+            }
+        }
 
         /// <summary>
         /// The query request object
@@ -104,6 +110,9 @@ namespace CryptoExchange.Net.Sockets
         /// </summary>
         public Action? OnComplete { get; set; }
 
+        /// <inheritdoc />
+        public event Action? OnMessageRouterUpdated;
+
         /// <summary>
         /// ctor
         /// </summary>
@@ -132,8 +141,8 @@ namespace CryptoExchange.Net.Sockets
             }
             else
             {
-                Completed = true;
                 Result = CallResult.SuccessResult;
+                Completed = true;
                 _event.Set();
             }
         }
@@ -145,9 +154,6 @@ namespace CryptoExchange.Net.Sockets
         /// <param name="ct">Cancellation token</param>
         /// <returns></returns>
         public async Task WaitAsync(TimeSpan timeout, CancellationToken ct) => await _event.WaitAsync(timeout, ct).ConfigureAwait(false);
-
-        /// <inheritdoc />
-        public virtual CallResult<object> Deserialize(IMessageAccessor message, Type type) => message.Deserialize(type);
 
         /// <summary>
         /// Mark request as timeout
@@ -163,12 +169,7 @@ namespace CryptoExchange.Net.Sockets
         /// <summary>
         /// Handle a response message
         /// </summary>
-        public abstract CallResult Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object message, MessageHandlerLink check);
-
-        /// <summary>
-        /// Handle a response message
-        /// </summary>
-        public abstract CallResult Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object message, MessageRoute route);
+        public abstract bool Handle(string typeIdentifier, string? topicFilter, SocketConnection connection, DateTime receiveTime, string? originalData, object message);
 
     }
 
@@ -198,17 +199,23 @@ namespace CryptoExchange.Net.Sockets
         }
 
         /// <inheritdoc />
-        public override CallResult Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object message, MessageRoute route)
+        public override bool Handle(string typeIdentifier, string? topicFilter, SocketConnection connection, DateTime receiveTime, string? originalData, object message)
         {
+            if (Completed)
+                return false;
+
             CurrentResponses++;
             if (CurrentResponses == RequiredResponses)
                 Response = message;
 
+            var handled = false;
             if (Result?.Success != false)
             {
                 // If an error result is already set don't override that
-                Result = route.Handle(connection, receiveTime, originalData, message);
-                if (Result == null)
+                MessageRouter.Handle(typeIdentifier, topicFilter, connection, receiveTime, originalData, message, out var result);
+                Result = result;
+                handled = Result != null;
+                if (!handled)
                     // Null from Handle means it wasn't actually for this query
                     CurrentResponses -= 1;
             }
@@ -220,37 +227,8 @@ namespace CryptoExchange.Net.Sockets
                 OnComplete?.Invoke();
             }
 
-            return Result ?? CallResult.SuccessResult;
+            return handled;
         }
-
-        /// <inheritdoc />
-        public override CallResult Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object message, MessageHandlerLink check)
-        {
-            if (!PreCheckMessage(connection, message))
-                return CallResult.SuccessResult;
-
-            CurrentResponses++;
-            if (CurrentResponses == RequiredResponses)            
-                Response = message;
-
-            if (Result?.Success != false)
-                // If an error result is already set don't override that
-                Result = check.Handle(connection, receiveTime, originalData, message);
-
-            if (CurrentResponses == RequiredResponses)
-            {
-                Completed = true;
-                _event.Set();
-                OnComplete?.Invoke();
-            }
-
-            return Result;
-        }
-
-        /// <summary>
-        /// Validate if a message is actually processable by this query
-        /// </summary>
-        public virtual bool PreCheckMessage(SocketConnection connection, object message) => true;
 
         /// <inheritdoc />
         public override void Timeout()
@@ -258,12 +236,12 @@ namespace CryptoExchange.Net.Sockets
             if (Completed)
                 return;
                         
-            Completed = true;
             if (TimeoutBehavior == TimeoutBehavior.Fail)
                 Result = new CallResult<THandlerResponse>(new TimeoutError());
             else
                 Result = new CallResult<THandlerResponse>(default, null, default);
 
+            Completed = true;
             _event.Set();
             OnComplete?.Invoke();
         }
@@ -276,6 +254,7 @@ namespace CryptoExchange.Net.Sockets
 
             Result = new CallResult<THandlerResponse>(error);
             Completed = true;
+
             _event.Set();
             OnComplete?.Invoke();
         }

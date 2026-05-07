@@ -1,3 +1,4 @@
+using CryptoExchange.Net.Authentication;
 using CryptoExchange.Net.Caching;
 using CryptoExchange.Net.Converters.MessageParsing.DynamicConverters;
 using CryptoExchange.Net.Interfaces;
@@ -31,12 +32,6 @@ namespace CryptoExchange.Net.Clients
     {
         /// <inheritdoc />
         public IRequestFactory RequestFactory { get; set; } = new RequestFactory();
-
-        /// <inheritdoc />
-        public abstract TimeSyncInfo? GetTimeSyncInfo();
-
-        /// <inheritdoc />
-        public abstract TimeSpan? GetTimeOffset();
 
         /// <inheritdoc />
         public int TotalRequestsMade { get; set; }
@@ -83,6 +78,16 @@ namespace CryptoExchange.Net.Clients
             { new HttpMethod("Patch"), HttpMethodParameterPosition.InBody },
         };
 
+        /// <summary>
+        /// Encoding/charset for the ContentType header
+        /// </summary>
+        protected Encoding? RequestBodyContentEncoding { get; set; } = Encoding.UTF8;
+
+        /// <summary>
+        /// Whether to omit the ContentType header if there is no content
+        /// </summary>
+        protected bool OmitContentTypeHeaderWithoutContent { get; set; } = false;
+
         /// <inheritdoc />
         public new RestExchangeOptions ClientOptions => (RestExchangeOptions)base.ClientOptions;
 
@@ -98,7 +103,17 @@ namespace CryptoExchange.Net.Clients
         /// The message handler
         /// </summary>
         protected abstract IRestMessageHandler MessageHandler { get; }
+
+        /// <summary>
+        /// Get the AuthenticationProvider implementation, or null if no ApiCredentials are set
+        /// </summary>
+        public virtual AuthenticationProvider? GetAuthenticationProvider() => null;
         
+        /// <summary>
+        /// Configured environment name
+        /// </summary>
+        public abstract string EnvironmentName { get; }
+
         /// <summary>
         /// ctor
         /// </summary>
@@ -107,22 +122,21 @@ namespace CryptoExchange.Net.Clients
         /// <param name="baseAddress">Base address for this API client</param>
         /// <param name="options">The base client options</param>
         /// <param name="apiOptions">The Api client options</param>
-        public RestApiClient(ILogger logger, HttpClient? httpClient, string baseAddress, RestExchangeOptions options, RestApiOptions apiOptions)
+        public RestApiClient(ILogger logger,
+            HttpClient? httpClient,
+            string baseAddress,
+            RestExchangeOptions options,
+            RestApiOptions apiOptions)
             : base(logger,
                   apiOptions.OutputOriginalData ?? options.OutputOriginalData,
-                  apiOptions.ApiCredentials ?? options.ApiCredentials,
                   baseAddress,
                   options,
                   apiOptions)
         {
+            TimeOffsetManager.RegisterRestApi(ClientName);
+
             RequestFactory.Configure(options, httpClient);
         }
-
-        /// <summary>
-        /// Create a message accessor instance
-        /// </summary>
-        /// <returns></returns>
-        protected abstract IStreamMessageAccessor CreateAccessor();
 
         /// <summary>
         /// Create a serializer instance
@@ -214,7 +228,7 @@ namespace CryptoExchange.Net.Clients
             string? rateLimitKeySuffix = null)
         {
             var requestId = ExchangeHelpers.NextId();
-            if (definition.Authenticated && AuthenticationProvider == null)
+            if (definition.Authenticated && GetAuthenticationProvider() == null)
             {
                 _logger.RestApiNoApiCredentials(requestId, definition.Path);
                 return new WebCallResult<T>(new NoApiCredentialsError());
@@ -241,11 +255,9 @@ namespace CryptoExchange.Net.Clients
             {
                 currentTry++;
 
-                var error = await CheckTimeSync(requestId, definition).ConfigureAwait(false);
-                if (error != null)
-                    return new WebCallResult<T>(error);
+                await CheckTimeSync(requestId, definition).ConfigureAwait(false);
 
-                error = await RateLimitAsync(
+                var error = await RateLimitAsync(
                     baseAddress,
                     requestId,
                     definition,
@@ -300,28 +312,6 @@ namespace CryptoExchange.Net.Clients
             }
         }
 
-        private async ValueTask<Error?> CheckTimeSync(int requestId, RequestDefinition definition)
-        {
-            if (!definition.Authenticated)
-                return null;
-
-            var syncTask = SyncTimeAsync();
-            var timeSyncInfo = GetTimeSyncInfo();
-
-            if (timeSyncInfo != null && timeSyncInfo.TimeSyncState.LastSyncTime == default)
-            {
-                // Initially with first request we'll need to wait for the time syncing, if it's not the first request we can just continue
-                var syncTimeError = await syncTask.ConfigureAwait(false);
-                if (syncTimeError != null)
-                {
-                    _logger.RestApiFailedToSyncTime(requestId, syncTimeError!.ToString());
-                    return syncTimeError;
-                }
-            }
-
-            return null;
-        }
-
         /// <summary>
         /// Check rate limits for the request
         /// </summary>
@@ -343,7 +333,17 @@ namespace CryptoExchange.Net.Clients
 
                 if (ClientOptions.RateLimiterEnabled)
                 {
-                    var limitResult = await definition.RateLimitGate.ProcessAsync(_logger, requestId, RateLimitItemType.Request, definition, host, AuthenticationProvider?._credentials.Key, requestWeight, ClientOptions.RateLimitingBehaviour, rateLimitKeySuffix, cancellationToken).ConfigureAwait(false);
+                    var limitResult = await definition.RateLimitGate.ProcessAsync(
+                        _logger,
+                        requestId,
+                        RateLimitItemType.Request,
+                        definition,
+                        host,
+                        GetAuthenticationProvider()?.Key,
+                        requestWeight, 
+                        ClientOptions.RateLimitingBehaviour,
+                        rateLimitKeySuffix,
+                        cancellationToken).ConfigureAwait(false);
                     if (!limitResult)
                         return limitResult.Error!;
                 }
@@ -358,7 +358,18 @@ namespace CryptoExchange.Net.Clients
                 if (ClientOptions.RateLimiterEnabled)
                 {
                     var singleRequestWeight = weightSingleLimiter ?? 1;
-                    var limitResult = await definition.RateLimitGate.ProcessSingleAsync(_logger, requestId, definition.LimitGuard, RateLimitItemType.Request, definition, host, AuthenticationProvider?._credentials.Key, singleRequestWeight, ClientOptions.RateLimitingBehaviour, rateLimitKeySuffix, cancellationToken).ConfigureAwait(false);
+                    var limitResult = await definition.RateLimitGate.ProcessSingleAsync(
+                        _logger,
+                        requestId, 
+                        definition.LimitGuard,
+                        RateLimitItemType.Request,
+                        definition,
+                        host, 
+                        GetAuthenticationProvider()?.Key,
+                        singleRequestWeight,
+                        ClientOptions.RateLimitingBehaviour,
+                        rateLimitKeySuffix,
+                        cancellationToken).ConfigureAwait(false);
                     if (!limitResult)
                         return limitResult.Error!;
                 }
@@ -397,7 +408,7 @@ namespace CryptoExchange.Net.Clients
 
             try
             {
-                AuthenticationProvider?.ProcessRequest(this, requestConfiguration);
+                GetAuthenticationProvider()?.ProcessRequest(this, requestConfiguration);
             }
             catch (Exception ex)
             {
@@ -408,7 +419,11 @@ namespace CryptoExchange.Net.Clients
             if (!string.IsNullOrEmpty(queryString) && !queryString.StartsWith("?"))
                 queryString = $"?{queryString}";
 
-            var uri = new Uri(baseAddress.AppendPath(definition.Path) + queryString);
+            var path = baseAddress.AppendPath(definition.Path);
+            if (definition.ForcePathEndWithSlash == true && !path.EndsWith("/"))
+                path += "/";
+
+            var uri = new Uri(path + queryString);
             var request = RequestFactory.Create(ClientOptions.HttpVersion, definition.Method, uri, requestId);
             request.Accept = MessageHandler.AcceptHeader;
 
@@ -432,14 +447,14 @@ namespace CryptoExchange.Net.Clients
                 var bodyContent = requestConfiguration.GetBodyContent();
                 if (bodyContent != null)
                 {
-                    request.SetContent(bodyContent, contentType);
+                    request.SetContent(bodyContent, RequestBodyContentEncoding, contentType);
                 }
                 else
                 {
                     if (requestConfiguration.BodyParameters != null && requestConfiguration.BodyParameters.Count != 0)
                         WriteParamBody(request, requestConfiguration.BodyParameters, contentType);
-                    else
-                        request.SetContent(RequestBodyEmptyContent, contentType);
+                    else if (OmitContentTypeHeaderWithoutContent != true)
+                        request.SetContent(RequestBodyEmptyContent, RequestBodyContentEncoding, contentType);                    
                 }
             }
 
@@ -471,26 +486,19 @@ namespace CryptoExchange.Net.Clients
                 responseStream = await response.GetResponseStreamAsync(cancellationToken).ConfigureAwait(false);
                 string? originalData = null;
                 var outputOriginalData = ApiOptions.OutputOriginalData ?? ClientOptions.OutputOriginalData;
-                if (outputOriginalData || MessageHandler.RequiresSeekableStream)
+                if (outputOriginalData || MessageHandler.RequiresSeekableStream || !response.IsSuccessStatusCode)
                 {
-                    // If we want to return the original string data from the stream, but still want to process it
-                    // we'll need to copy it as the stream isn't seekable, and thus we can only read it once
-                    var memoryStream = new MemoryStream();
-                    await responseStream.CopyToAsync(memoryStream).ConfigureAwait(false);
-                    using var reader = new StreamReader(memoryStream, Encoding.UTF8, false, 4096, true);
-                    if (outputOriginalData) 
+                    // Create a seekable stream from the response stream if:
+                    // 1. We need to output the original data
+                    // 2. The message handler requires a seekable stream
+                    // 3. The response indicates error and we want to output (part of) the returned data
+                    responseStream = await CopyStreamAsync(responseStream).ConfigureAwait(false);
+                    using var reader = new StreamReader(responseStream, Encoding.UTF8, false, 4096, true);
+                    if (outputOriginalData)
                     {
-                        memoryStream.Position = 0;
                         originalData = await reader.ReadToEndAsync().ConfigureAwait(false);
-
-                        if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.RestApiReceivedResponse(request.RequestId, originalData);
+                        responseStream.Position = 0;
                     }
-
-                    // Continue processing from the memory stream since the response stream is already read and we can't seek it
-                    responseStream.Close();
-                    memoryStream.Position = 0;
-                    responseStream = memoryStream;
                 }
 
                 if (!response.IsSuccessStatusCode && !requestDefinition.TryParseOnNonSuccess)
@@ -516,10 +524,19 @@ namespace CryptoExchange.Net.Clients
                     else
                     {
                         // Handle a 'normal' error response. Can still be either a json error message or some random HTML or other string
-                        error = await MessageHandler.ParseErrorResponse(
-                            (int)response.StatusCode,
-                            response.ResponseHeaders,
-                            responseStream).ConfigureAwait(false);
+                        try
+                        {
+                            error = await MessageHandler.ParseErrorResponse(
+                                (int)response.StatusCode,
+                                response.ResponseHeaders,
+                                responseStream).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Unhandled exception when parsing error response: {Message}", ex.Message);
+                            var errorResult = new ServerError(ErrorInfo.Unknown with { Message = ex.Message });
+                            return new WebCallResult<T>(response.StatusCode, response.HttpVersion, response.ResponseHeaders, sw.Elapsed, response.ContentLength, originalData, request.RequestId, request.Uri.ToString(), request.Content, request.Method, request.GetHeaders(), ResultDataSource.Server, default, errorResult);
+                        }
                     }
 
                     return new WebCallResult<T>(response.StatusCode, response.HttpVersion, response.ResponseHeaders, sw.Elapsed, response.ContentLength, originalData, request.RequestId, request.Uri.ToString(), request.Content, request.Method, request.GetHeaders(), ResultDataSource.Server, default, error);
@@ -558,10 +575,19 @@ namespace CryptoExchange.Net.Clients
                 if (deserializeError != null)
                     return new WebCallResult<T>(response.StatusCode, response.HttpVersion, response.ResponseHeaders, sw.Elapsed, response.ContentLength, originalData, request.RequestId, request.Uri.ToString(), request.Content, request.Method, request.GetHeaders(), ResultDataSource.Server, deserializeResult, deserializeError); ;
 
-                // Check the deserialized response to see if it's an error or not
-                var responseError = MessageHandler.CheckDeserializedResponse(response.ResponseHeaders, deserializeResult);
-                if (responseError != null)
-                    return new WebCallResult<T>(response.StatusCode, response.HttpVersion, response.ResponseHeaders, sw.Elapsed, response.ContentLength, originalData, request.RequestId, request.Uri.ToString(), request.Content, request.Method, request.GetHeaders(), ResultDataSource.Server, deserializeResult, responseError);
+                try
+                {
+                    // Check the deserialized response to see if it's an error or not
+                    var responseError = MessageHandler.CheckDeserializedResponse(response.ResponseHeaders, deserializeResult);
+                    if (responseError != null)
+                        return new WebCallResult<T>(response.StatusCode, response.HttpVersion, response.ResponseHeaders, sw.Elapsed, response.ContentLength, originalData, request.RequestId, request.Uri.ToString(), request.Content, request.Method, request.GetHeaders(), ResultDataSource.Server, deserializeResult, responseError);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Unhandled exception when checking deserialized response: {Message}", ex.Message);
+                    var error = new ServerError(ErrorInfo.Unknown with { Message = ex.Message });
+                    return new WebCallResult<T>(response.StatusCode, response.HttpVersion, response.ResponseHeaders, sw.Elapsed, response.ContentLength, originalData, request.RequestId, request.Uri.ToString(), request.Content, request.Method, request.GetHeaders(), ResultDataSource.Server, deserializeResult, error);
+                }
 
                 return new WebCallResult<T>(response.StatusCode, response.HttpVersion, response.ResponseHeaders, sw.Elapsed, response.ContentLength, originalData, request.RequestId, request.Uri.ToString(), request.Content, request.Method, request.GetHeaders(), ResultDataSource.Server, deserializeResult, null);
             }
@@ -669,13 +695,13 @@ namespace CryptoExchange.Net.Clients
                     stringData = stringSerializer.Serialize(value);
                 else
                     stringData = stringSerializer.Serialize(parameters);
-                request.SetContent(stringData, contentType);
+                request.SetContent(stringData, RequestBodyContentEncoding, contentType);
             }
             else if (contentType == Constants.FormContentHeader)
             {
                 // Write the parameters as form data in the body
                 var stringData = parameters.ToFormData();
-                request.SetContent(stringData, contentType);
+                request.SetContent(stringData, RequestBodyContentEncoding, contentType);
             }
         }
 
@@ -698,34 +724,53 @@ namespace CryptoExchange.Net.Clients
         /// <returns>Server time</returns>
         protected virtual Task<WebCallResult<DateTime>> GetServerTimestampAsync() => throw new NotImplementedException();
 
-        /// <inheritdoc />
-        public override void SetOptions<T>(UpdateOptions<T> options)
+        private async ValueTask CheckTimeSync(int requestId, RequestDefinition definition)
         {
-            base.SetOptions(options);
+            if (!definition.Authenticated)
+                return;
 
-            RequestFactory.UpdateSettings(options.Proxy, options.RequestTimeout ?? ClientOptions.RequestTimeout, ClientOptions.HttpKeepAliveInterval);
+            var lastUpdateTime = TimeOffsetManager.GetRestLastUpdateTime(ClientName);
+            var syncTask = CheckTimeOffsetAsync();
+
+            if (lastUpdateTime == null)
+            {
+                // Initially with first request we'll need to wait for the time syncing before making the actual request.
+                // If it's not the first request we can just continue and let it complete in the background
+                await syncTask.ConfigureAwait(false);
+            }
+
+            return;
         }
 
-        internal async ValueTask<Error?> SyncTimeAsync()
+        internal async ValueTask CheckTimeOffsetAsync()
         {
-            var timeSyncParams = GetTimeSyncInfo();
-            if (timeSyncParams == null)
-                return null;
+            if (!(ApiOptions.AutoTimestamp ?? ClientOptions.AutoTimestamp))
+                // Time syncing not enabled
+                return;
 
-            if (await timeSyncParams.TimeSyncState.Semaphore.WaitAsync(0).ConfigureAwait(false))
+            await TimeOffsetManager.EnterAsync(ClientName).ConfigureAwait(false);
+            try
             {
-                if (!timeSyncParams.SyncTime || DateTime.UtcNow - timeSyncParams.TimeSyncState.LastSyncTime < timeSyncParams.RecalculationInterval)
-                {
-                    timeSyncParams.TimeSyncState.Semaphore.Release();
-                    return null;
-                }
+                var lastUpdateTime = TimeOffsetManager.GetRestLastUpdateTime(ClientName);
+                if (DateTime.UtcNow - lastUpdateTime < (ApiOptions.TimestampRecalculationInterval ?? ClientOptions.TimestampRecalculationInterval))
+                    // Time syncing was recently done
+                    return;
 
                 var localTime = DateTime.UtcNow;
-                var result = await GetServerTimestampAsync().ConfigureAwait(false);
+                WebCallResult<DateTime> result;
+                try
+                {
+                    result = await GetServerTimestampAsync().ConfigureAwait(false);
+                }
+                catch (NotImplementedException)
+                {
+                    throw new ArgumentException("AutoTimestamp is not available for this API");
+                }
+
                 if (!result)
                 {
-                    timeSyncParams.TimeSyncState.Semaphore.Release();
-                    return result.Error;
+                    _logger.LogWarning("Failed to determine time offset between client and server, timestamping might fail");
+                    return;
                 }
 
                 if (TotalRequestsMade == 1)
@@ -735,18 +780,38 @@ namespace CryptoExchange.Net.Clients
                     result = await GetServerTimestampAsync().ConfigureAwait(false);
                     if (!result)
                     {
-                        timeSyncParams.TimeSyncState.Semaphore.Release();
-                        return result.Error;
+                        _logger.LogWarning("Failed to determine time offset between client and server, timestamping might fail");
+                        return;
                     }
                 }
 
-                // Calculate time offset between local and server
+                // Estimate the offset as the round trip time / 2
                 var offset = result.Data - localTime.AddMilliseconds(result.ResponseTime!.Value.TotalMilliseconds / 2);
-                timeSyncParams.UpdateTimeOffset(offset);
-                timeSyncParams.TimeSyncState.Semaphore.Release();
-            }
+                if (offset.TotalMilliseconds > 0 && offset.TotalMilliseconds < 500)
+                {
+                    _logger.LogInformation("{ClientName} Time offset within limits ({Offset}ms), set offset to 0ms", ClientName, Math.Round(offset.TotalMilliseconds));
+                    offset = TimeSpan.Zero;
+                }
+                else
+                {
+                    _logger.LogInformation("{ClientName} Time offset set to {Offset}ms", ClientName, Math.Round(offset.TotalMilliseconds));
+                }
 
-            return null;
+                TimeOffsetManager.UpdateRestOffset(ClientName, offset.TotalMilliseconds);
+            }
+            finally
+            {
+                TimeOffsetManager.Release(ClientName);
+            }
+        }
+
+        private async Task<Stream> CopyStreamAsync(Stream responseStream)
+        {
+            var memoryStream = new MemoryStream();
+            await responseStream.CopyToAsync(memoryStream).ConfigureAwait(false);
+            responseStream.Close();
+            memoryStream.Position = 0;
+            return memoryStream;
         }
 
         private bool ShouldCache(RequestDefinition definition)
@@ -754,5 +819,170 @@ namespace CryptoExchange.Net.Clients
             && definition.Method == HttpMethod.Get
             && !definition.PreventCaching;
 
+
+        /// <inheritdoc />
+        public virtual void SetOptions(UpdateOptions options)
+        {
+            _proxyConfigured = options.Proxy != null;
+            ClientOptions.Proxy = options.Proxy;
+            ClientOptions.RequestTimeout = options.RequestTimeout ?? ClientOptions.RequestTimeout;
+
+            RequestFactory.UpdateSettings(options.Proxy, options.RequestTimeout ?? ClientOptions.RequestTimeout, ClientOptions.HttpKeepAliveInterval);
+        }
+    }
+
+    /// <inheritdoc />
+    public abstract class RestApiClient<TEnvironment> : RestApiClient, IRestApiClient
+        where TEnvironment : TradeEnvironment
+    {
+        /// <inheritdoc />
+        public new RestExchangeOptions<TEnvironment> ClientOptions => (RestExchangeOptions<TEnvironment>)base.ClientOptions;
+
+        /// <inheritdoc />
+        public override string EnvironmentName => ClientOptions.Environment.Name;
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        protected RestApiClient(
+            ILogger logger,
+            HttpClient? httpClient,
+            string baseAddress,
+            RestExchangeOptions options,
+            RestApiOptions apiOptions) : base(
+                logger,
+                httpClient,
+                baseAddress,
+                options,
+                apiOptions)
+        {
+        }
+    }
+
+    /// <inheritdoc />
+    public abstract class RestApiClient<TEnvironment, TApiCredentials> : RestApiClient<TEnvironment>, IRestApiClient<TApiCredentials>
+        where TApiCredentials : ApiCredentials
+        where TEnvironment : TradeEnvironment
+    {
+        /// <inheritdoc />
+        public TApiCredentials? ApiCredentials { get; set; }
+
+        /// <inheritdoc />
+        public bool Authenticated => ApiCredentials != null;
+
+        /// <inheritdoc />
+        public new RestExchangeOptions<TEnvironment, TApiCredentials> ClientOptions => (RestExchangeOptions<TEnvironment, TApiCredentials>)base.ClientOptions;
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        protected RestApiClient(
+            ILogger logger,
+            HttpClient? httpClient,
+            string baseAddress,
+            RestExchangeOptions<TEnvironment, TApiCredentials> options,
+            RestApiOptions apiOptions) : base(
+                logger,
+                httpClient,
+                baseAddress,
+                options,
+                apiOptions)
+        {
+            ApiCredentials =  options.ApiCredentials;
+        }
+
+        /// <inheritdoc />
+        public virtual void SetApiCredentials(TApiCredentials credentials)
+        {
+            ApiCredentials = (TApiCredentials)credentials.Copy();
+        }
+
+        /// <inheritdoc />
+        public virtual void SetOptions(UpdateOptions<TApiCredentials> options)
+        {
+            base.SetOptions(options);
+
+            ApiCredentials = (TApiCredentials?)options.ApiCredentials?.Copy() ?? ApiCredentials;
+        }
+    }
+
+    /// <inheritdoc />
+    public abstract class RestApiClient<TEnvironment, TAuthenticationProvider, TApiCredentials> : RestApiClient<TEnvironment, TApiCredentials>
+        where TApiCredentials : ApiCredentials
+        where TAuthenticationProvider : AuthenticationProvider<TApiCredentials>
+        where TEnvironment : TradeEnvironment
+    {
+
+        private bool _authProviderInitialized = false;
+        private TAuthenticationProvider? _authenticationProvider;
+        /// <summary>
+        /// The authentication provider for this API client. (null if no credentials are set)
+        /// </summary>
+        public TAuthenticationProvider? AuthenticationProvider
+        {
+            get
+            {
+                if (!_authProviderInitialized)
+                {
+                    if (ApiCredentials != null)
+                        _authenticationProvider = CreateAuthenticationProvider(ApiCredentials);
+
+                    _authProviderInitialized = true;
+                }
+
+                return _authenticationProvider;
+            }
+            internal set => _authenticationProvider = value;
+        }
+
+        /// <inheritdoc />
+        public override AuthenticationProvider? GetAuthenticationProvider() => AuthenticationProvider;
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        protected RestApiClient(
+            ILogger logger, 
+            HttpClient? httpClient,
+            string baseAddress,
+            RestExchangeOptions<TEnvironment, TApiCredentials> options, 
+            RestApiOptions apiOptions) : base(
+                logger, 
+                httpClient,
+                baseAddress,
+                options, 
+                apiOptions)
+        {
+        }
+
+        /// <summary>
+        /// Create an AuthenticationProvider implementation instance based on the provided credentials
+        /// </summary>
+        /// <param name="credentials"></param>
+        /// <returns></returns>
+        protected abstract TAuthenticationProvider CreateAuthenticationProvider(TApiCredentials credentials);
+
+        /// <inheritdoc />
+        public override void SetApiCredentials(TApiCredentials credentials)
+        {
+            base.SetApiCredentials(credentials);
+
+            AuthenticationProvider = null;
+            _authProviderInitialized = false;
+            ApiCredentials = credentials;
+        }
+
+        /// <inheritdoc />
+        public override void SetOptions(UpdateOptions<TApiCredentials> options)
+        {
+            base.SetOptions(options);
+
+            if (options.ApiCredentials != null)
+            {
+                AuthenticationProvider = null;
+                _authProviderInitialized = false;
+                ApiCredentials = options.ApiCredentials;
+            }
+        }
     }
 }

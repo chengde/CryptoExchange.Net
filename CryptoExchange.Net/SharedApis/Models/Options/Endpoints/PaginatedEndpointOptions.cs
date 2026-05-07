@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace CryptoExchange.Net.SharedApis
@@ -14,9 +15,13 @@ namespace CryptoExchange.Net.SharedApis
 #endif
     {
         /// <summary>
-        /// Type of pagination supported
+        /// Whether ascending data retrieval and pagination is available
         /// </summary>
-        public SharedPaginationSupport PaginationSupport { get; }
+        public bool SupportsAscending { get; set; }
+        /// <summary>
+        /// Whether ascending data retrieval and pagination is available
+        /// </summary>
+        public bool SupportsDescending { get; set; }
 
         /// <summary>
         /// Whether filtering based on start/end time is supported
@@ -29,11 +34,22 @@ namespace CryptoExchange.Net.SharedApis
         public int MaxLimit { get; set; }
 
         /// <summary>
+        /// Max age of data that can be requested
+        /// </summary>
+        public TimeSpan? MaxAge { get; set; }
+
+        /// <summary>
         /// ctor
         /// </summary>
-        public PaginatedEndpointOptions(SharedPaginationSupport paginationType, bool timePeriodSupport, int maxLimit, bool needsAuthentication) : base(needsAuthentication)
+        public PaginatedEndpointOptions(
+            bool supportsAscending,
+            bool supportsDescending,
+            bool timePeriodSupport,
+            int maxLimit,
+            bool needsAuthentication) : base(needsAuthentication)
         {
-            PaginationSupport = paginationType;
+            SupportsAscending = supportsAscending;
+            SupportsDescending = supportsDescending;
             TimePeriodFilterSupport = timePeriodSupport;
             MaxLimit = maxLimit;
         }
@@ -42,9 +58,11 @@ namespace CryptoExchange.Net.SharedApis
         public override string ToString(string exchange)
         {
             var sb = new StringBuilder(base.ToString(exchange));
-            sb.AppendLine($"Pagination type: {PaginationSupport}");
+            sb.AppendLine($"Ascending retrieval supported: {SupportsAscending}");
+            sb.AppendLine($"Descending retrieval supported: {SupportsDescending}");
             sb.AppendLine($"Time period filter support: {TimePeriodFilterSupport}");
             sb.AppendLine($"Max limit: {MaxLimit}");
+            sb.AppendLine($"Max age: {MaxAge}");
             return sb.ToString();
         }
     }

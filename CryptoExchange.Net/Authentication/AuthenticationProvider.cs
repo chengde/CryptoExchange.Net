@@ -11,6 +11,9 @@ using System.Linq;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using CryptoExchange.Net.Sockets;
+using CryptoExchange.Net.Sockets.Default;
+using System.Net;
 
 namespace CryptoExchange.Net.Authentication
 {
@@ -22,65 +25,24 @@ namespace CryptoExchange.Net.Authentication
         internal IAuthTimeProvider TimeProvider { get; set; } = new AuthTimeProvider();
 
         /// <summary>
-        /// The supported credential types
+        /// The public identifier for the provided credentials
         /// </summary>
-        public abstract ApiCredentialsType[] SupportedCredentialTypes { get; }
+        public abstract string Key { get; }
 
         /// <summary>
-        /// Provided credentials
+        /// Authenticate a REST request
         /// </summary>
-        protected internal readonly ApiCredentials _credentials;
-
-        /// <summary>
-        /// Byte representation of the secret
-        /// </summary>
-        protected byte[] _sBytes;
-
-#if NET8_0_OR_GREATER
-        /// <summary>
-        /// The Ed25519 private key
-        /// </summary>
-        protected Key? Ed25519Key;
-#endif
-
-        /// <summary>
-        /// Get the API key of the current credentials
-        /// </summary>
-        public string ApiKey => _credentials.Key!;
-        /// <summary>
-        /// Get the Passphrase of the current credentials
-        /// </summary>
-        public string? Pass => _credentials.Pass;
-
-        /// <summary>
-        /// ctor
-        /// </summary>
-        /// <param name="credentials"></param>
-        protected AuthenticationProvider(ApiCredentials credentials)
-        {
-            if (credentials.Key == null || credentials.Secret == null)
-                throw new ArgumentException("ApiKey/Secret needed");
-
-            if (!SupportedCredentialTypes.Any(x => x == credentials.CredentialType))
-                throw new ArgumentException($"Credential type {credentials.CredentialType} not supported");
-
-            if (credentials.CredentialType == ApiCredentialsType.Ed25519)
-            {
-#if !NET8_0_OR_GREATER
-                throw new ArgumentException($"Credential type Ed25519 only supported on Net8.0 or newer");
-#endif
-            }
-
-            _credentials = credentials;
-            _sBytes = Encoding.UTF8.GetBytes(credentials.Secret);
-        }
-
-        /// <summary>
-        /// Authenticate a request
-        /// </summary>
-        /// <param name="apiClient">The Api client sending the request</param>
+        /// <param name="apiClient">The API client sending the request</param>
         /// <param name="requestConfig">The request configuration</param>
         public abstract void ProcessRequest(RestApiClient apiClient, RestRequestConfiguration requestConfig);
+
+        /// <summary>
+        /// Get an authentication query for a websocket
+        /// </summary>
+        /// <param name="apiClient">The API client sending the request</param>
+        /// <param name="connection">The connection to authenticate</param>
+        /// <param name="context">Optional context required for creating the authentication query</param>
+        public virtual Query? GetAuthenticationQuery(SocketApiClient apiClient, SocketConnection connection, Dictionary<string, object?>? context = null) => null;
 
         /// <summary>
         /// SHA256 sign the data and return the bytes
@@ -266,21 +228,15 @@ namespace CryptoExchange.Net.Authentication
         /// <summary>
         /// HMACSHA256 sign the data and return the hash
         /// </summary>
-        /// <param name="data">Data to sign</param>
-        /// <param name="outputType">String type</param>
-        /// <returns></returns>
-        protected string SignHMACSHA256(string data, SignOutputType? outputType = null)
-            => SignHMACSHA256(Encoding.UTF8.GetBytes(data), outputType);
+        protected string SignHMACSHA256(HMACCredential credential, string data, SignOutputType? outputType = null)
+            => SignHMACSHA256(credential,Encoding.UTF8.GetBytes(data), outputType);
 
         /// <summary>
         /// HMACSHA256 sign the data and return the hash
         /// </summary>
-        /// <param name="data">Data to sign</param>
-        /// <param name="outputType">String type</param>
-        /// <returns></returns>
-        protected string SignHMACSHA256(byte[] data, SignOutputType? outputType = null)
+        protected string SignHMACSHA256(HMACCredential credential, byte[] data, SignOutputType? outputType = null)
         {
-            using var encryptor = new HMACSHA256(_sBytes);
+            using var encryptor = new HMACSHA256(credential.GetSBytes());
             var resultBytes = encryptor.ComputeHash(data);
             return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
         }
@@ -288,21 +244,15 @@ namespace CryptoExchange.Net.Authentication
         /// <summary>
         /// HMACSHA384 sign the data and return the hash
         /// </summary>
-        /// <param name="data">Data to sign</param>
-        /// <param name="outputType">String type</param>
-        /// <returns></returns>
-        protected string SignHMACSHA384(string data, SignOutputType? outputType = null)
-            => SignHMACSHA384(Encoding.UTF8.GetBytes(data), outputType);
+        protected string SignHMACSHA384(HMACCredential credential, string data, SignOutputType? outputType = null)
+            => SignHMACSHA384(credential, Encoding.UTF8.GetBytes(data), outputType);
 
         /// <summary>
         /// HMACSHA384 sign the data and return the hash
         /// </summary>
-        /// <param name="data">Data to sign</param>
-        /// <param name="outputType">String type</param>
-        /// <returns></returns>
-        protected string SignHMACSHA384(byte[] data, SignOutputType? outputType = null)
+        protected string SignHMACSHA384(HMACCredential credential, byte[] data, SignOutputType? outputType = null)
         {
-            using var encryptor = new HMACSHA384(_sBytes);
+            using var encryptor = new HMACSHA384(credential.GetSBytes());
             var resultBytes = encryptor.ComputeHash(data);
             return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
         }
@@ -310,21 +260,15 @@ namespace CryptoExchange.Net.Authentication
         /// <summary>
         /// HMACSHA512 sign the data and return the hash
         /// </summary>
-        /// <param name="data">Data to sign</param>
-        /// <param name="outputType">String type</param>
-        /// <returns></returns>
-        protected string SignHMACSHA512(string data, SignOutputType? outputType = null)
-            => SignHMACSHA512(Encoding.UTF8.GetBytes(data), outputType);
+        protected string SignHMACSHA512(HMACCredential credential, string data, SignOutputType? outputType = null)
+            => SignHMACSHA512(credential, Encoding.UTF8.GetBytes(data), outputType);
 
         /// <summary>
         /// HMACSHA512 sign the data and return the hash
         /// </summary>
-        /// <param name="data">Data to sign</param>
-        /// <param name="outputType">String type</param>
-        /// <returns></returns>
-        protected string SignHMACSHA512(byte[] data, SignOutputType? outputType = null)
+        protected string SignHMACSHA512(HMACCredential credential, byte[] data, SignOutputType? outputType = null)
         {
-            using var encryptor = new HMACSHA512(_sBytes);
+            using var encryptor = new HMACSHA512(credential.GetSBytes());
             var resultBytes = encryptor.ComputeHash(data);
             return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
         }
@@ -332,27 +276,21 @@ namespace CryptoExchange.Net.Authentication
         /// <summary>
         /// SHA256 sign the data
         /// </summary>
-        /// <param name="data"></param>
-        /// <param name="outputType"></param>
-        /// <returns></returns>
-        protected string SignRSASHA256(byte[] data, SignOutputType? outputType = null)
+        protected string SignRSASHA256(RSACredential credential, byte[] data, SignOutputType? outputType = null)
         {
-            using var rsa = CreateRSA();
+            var rsa = credential.GetSigner();
             using var sha256 = SHA256.Create();
             var hash = sha256.ComputeHash(data);
             var resultBytes = rsa.SignHash(hash, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-            return outputType == SignOutputType.Base64? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
+            return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
         }
 
         /// <summary>
         /// SHA384 sign the data
         /// </summary>
-        /// <param name="data"></param>
-        /// <param name="outputType"></param>
-        /// <returns></returns>
-        protected string SignRSASHA384(byte[] data, SignOutputType? outputType = null)
+        protected string SignRSASHA384(RSACredential credential, byte[] data, SignOutputType? outputType = null)
         {
-            using var rsa = CreateRSA();
+            var rsa = credential.GetSigner();
             using var sha384 = SHA384.Create();
             var hash = sha384.ComputeHash(data);
             var resultBytes = rsa.SignHash(hash, HashAlgorithmName.SHA384, RSASignaturePadding.Pkcs1);
@@ -362,79 +300,32 @@ namespace CryptoExchange.Net.Authentication
         /// <summary>
         /// SHA512 sign the data
         /// </summary>
-        /// <param name="data"></param>
-        /// <param name="outputType"></param>
-        /// <returns></returns>
-        protected string SignRSASHA512(byte[] data, SignOutputType? outputType = null)
+        protected string SignRSASHA512(RSACredential credential, byte[] data, SignOutputType? outputType = null)
         {
-            using var rsa = CreateRSA();
+            var rsa = credential.GetSigner();
             using var sha512 = SHA512.Create();
             var hash = sha512.ComputeHash(data);
             var resultBytes = rsa.SignHash(hash, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1);
             return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
         }
 
-        /// <summary>
-        /// Ed25519 sign the data 
-        /// </summary>
-        public string SignEd25519(string data, SignOutputType? outputType = null)
-            => SignEd25519(Encoding.ASCII.GetBytes(data), outputType);
-
-        /// <summary>
-        /// Ed25519 sign the data 
-        /// </summary>
-        public string SignEd25519(byte[] data, SignOutputType? outputType = null)
-        {
 #if NET8_0_OR_GREATER
-            if (Ed25519Key == null)
-            {
-                var key = _credentials.Secret!
-                        .Replace("\n", "")
-                        .Replace("-----BEGIN PRIVATE KEY-----", "")
-                        .Replace("-----END PRIVATE KEY-----", "")
-                        .Trim();
-                var keyBytes = Convert.FromBase64String(key);
-                Ed25519Key = Key.Import(SignatureAlgorithm.Ed25519, keyBytes, KeyBlobFormat.PkixPrivateKey);
-            }
+        /// <summary>
+        /// Ed25519 sign the data 
+        /// </summary>
+        public string SignEd25519(Ed25519Credential credential, string data, SignOutputType? outputType = null)
+            => SignEd25519(credential, Encoding.ASCII.GetBytes(data), outputType);
 
-            var resultBytes = SignatureAlgorithm.Ed25519.Sign(Ed25519Key, data);
-            return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
-#else
-            throw new InvalidOperationException();
-#endif
-        }
-
-        private RSA CreateRSA()
+        /// <summary>
+        /// Ed25519 sign the data 
+        /// </summary>
+        public string SignEd25519(Ed25519Credential credential, byte[] data, SignOutputType? outputType = null)
         {
-            var rsa = RSA.Create();
-            if (_credentials.CredentialType == ApiCredentialsType.RsaPem)
-            {
-#if NETSTANDARD2_1_OR_GREATER || NET9_0_OR_GREATER
-                // Read from pem private key
-                var key = _credentials.Secret!
-                        .Replace("\n", "")
-                        .Replace("-----BEGIN PRIVATE KEY-----", "")
-                        .Replace("-----END PRIVATE KEY-----", "")
-                        .Trim();
-                rsa.ImportPkcs8PrivateKey(Convert.FromBase64String(
-                    key)
-                    , out _);
-#else
-                throw new Exception("Pem format not supported when running from .NetStandard2.0. Convert the private key to xml format.");
-#endif
-            }
-            else if (_credentials.CredentialType == ApiCredentialsType.RsaXml)
-            {
-                // Read from xml private key format
-                rsa.FromXmlString(_credentials.Secret!);
-            }
-            else
-            {
-                throw new Exception("Invalid credentials type");
-            }
-
-            return rsa;
+            var signKey = credential.GetSigningKey();
+            var resultBytes = SignatureAlgorithm.Ed25519.Sign(signKey, data);
+            return outputType == SignOutputType.Base64 ? BytesToBase64String(resultBytes) : BytesToHexString(resultBytes);
         }
+#endif
 
         /// <summary>
         /// Convert byte array to hex string
@@ -442,6 +333,14 @@ namespace CryptoExchange.Net.Authentication
         /// <param name="buff"></param>
         /// <returns></returns>
         protected static string BytesToHexString(byte[] buff)
+            => BytesToHexString(new ArraySegment<byte>(buff));
+
+        /// <summary>
+        /// Convert byte array to hex string
+        /// </summary>
+        /// <param name="buff"></param>
+        /// <returns></returns>
+        protected static string BytesToHexString(ArraySegment<byte> buff)
         {
 #if NET9_0_OR_GREATER
             return Convert.ToHexString(buff);
@@ -451,6 +350,26 @@ namespace CryptoExchange.Net.Authentication
                 result += t.ToString("X2");
             return result;
 #endif
+        }
+
+        /// <summary>
+        /// Convert a hex encoded string to byte array
+        /// </summary>
+        /// <param name="hexString"></param>
+        /// <returns></returns>
+        protected static byte[] HexToBytesString(string hexString)
+        {
+            if (hexString.StartsWith("0x"))
+                hexString = hexString.Substring(2);
+
+            byte[] bytes = new byte[hexString.Length / 2];
+            for (int i = 0; i < hexString.Length; i += 2)
+            {
+                string hexSubstring = hexString.Substring(i, 2);
+                bytes[i / 2] = Convert.ToByte(hexSubstring, 16);
+            }
+
+            return bytes;
         }
 
         /// <summary>
@@ -466,32 +385,53 @@ namespace CryptoExchange.Net.Authentication
         /// <summary>
         /// Get current timestamp including the time sync offset from the api client
         /// </summary>
-        /// <param name="apiClient"></param>
-        /// <returns></returns>
-        protected DateTime GetTimestamp(RestApiClient apiClient)
+        protected DateTime GetTimestamp(RestApiClient apiClient, bool includeOneSecondOffset = true)
         {
-            return TimeProvider.GetTime().Add(apiClient.GetTimeOffset() ?? TimeSpan.Zero)!;
+            var result =  TimeProvider.GetTime().Add(TimeOffsetManager.GetRestOffset(apiClient.ClientName) ?? TimeSpan.Zero)!;
+            if (includeOneSecondOffset)
+                result = result.AddSeconds(-1);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Get current timestamp including the time sync offset from the api client
+        /// </summary>
+        protected DateTime GetTimestamp(SocketApiClient apiClient, bool includeOneSecondOffset = true)
+        {
+            var timestamp = TimeProvider.GetTime();
+            if(apiClient.ApiOptions.AutoTimestamp ?? apiClient.ClientOptions.AutoTimestamp)
+                timestamp = timestamp.Add(-TimeOffsetManager.GetSocketOffset(apiClient.ClientName) ?? TimeSpan.Zero)!;
+
+            if (includeOneSecondOffset)
+                timestamp = timestamp.AddSeconds(-1);
+
+            return timestamp;
         }
 
         /// <summary>
         /// Get millisecond timestamp as a string including the time sync offset from the api client
         /// </summary>
-        /// <param name="apiClient"></param>
-        /// <returns></returns>
-        protected string GetMillisecondTimestamp(RestApiClient apiClient)
-        {
-            return DateTimeConverter.ConvertToMilliseconds(GetTimestamp(apiClient)).Value.ToString(CultureInfo.InvariantCulture);
-        }
+        protected string GetMillisecondTimestamp(RestApiClient apiClient, bool includeOneSecondOffset = true)
+            => DateTimeConverter.ConvertToMilliseconds(GetTimestamp(apiClient, includeOneSecondOffset)).Value.ToString(CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// Get millisecond timestamp as a string including the time sync offset from the api client
+        /// </summary>
+        protected string GetMillisecondTimestamp(SocketApiClient apiClient, bool includeOneSecondOffset = true)
+            => DateTimeConverter.ConvertToMilliseconds(GetTimestamp(apiClient, includeOneSecondOffset)).Value.ToString(CultureInfo.InvariantCulture);
 
         /// <summary>
         /// Get millisecond timestamp as a long including the time sync offset from the api client
         /// </summary>
-        /// <param name="apiClient"></param>
-        /// <returns></returns>
-        protected long GetMillisecondTimestampLong(RestApiClient apiClient)
-        {
-            return DateTimeConverter.ConvertToMilliseconds(GetTimestamp(apiClient)).Value;
-        }
+        protected long GetMillisecondTimestampLong(RestApiClient apiClient, bool includeOneSecondOffset = true)
+            => DateTimeConverter.ConvertToMilliseconds(GetTimestamp(apiClient, includeOneSecondOffset)).Value;
+
+        /// <summary>
+        /// Get millisecond timestamp as a long including the time sync offset from the api client
+        /// </summary>
+        protected long GetMillisecondTimestampLong(SocketApiClient apiClient, bool includeOneSecondOffset = true)
+            => DateTimeConverter.ConvertToMilliseconds(GetTimestamp(apiClient, includeOneSecondOffset)).Value;
 
         /// <summary>
         /// Return the serialized request body
@@ -512,17 +452,179 @@ namespace CryptoExchange.Net.Authentication
     }
 
     /// <inheritdoc />
-    public abstract class AuthenticationProvider<TApiCredentials> : AuthenticationProvider where TApiCredentials : ApiCredentials
+    public abstract class AuthenticationProvider<TApiCredentials> : AuthenticationProvider
+        where TApiCredentials: ApiCredentials
     {
-        /// <inheritdoc />
-        protected new TApiCredentials _credentials => (TApiCredentials)base._credentials;
+        /// <summary>
+        /// API credentials used for signing requests
+        /// </summary>
+        public TApiCredentials ApiCredentials { get; set; }
 
         /// <summary>
         /// ctor
         /// </summary>
-        /// <param name="credentials"></param>
-        protected AuthenticationProvider(TApiCredentials credentials) : base(credentials)
+        protected AuthenticationProvider(TApiCredentials credentials)
         {
+            credentials.Validate();
+
+            ApiCredentials = credentials;
         }
+    }
+
+    /// <inheritdoc />
+    public abstract class AuthenticationProvider<TApiCredentials, TCredentialType> : AuthenticationProvider<TApiCredentials>
+        where TApiCredentials : ApiCredentials
+        where TCredentialType : CredentialSet
+    {
+        /// <summary>
+        /// The specific credential type used for signing requests.
+        /// </summary>
+        public TCredentialType Credential { get; }
+
+        /// <inheritdoc />
+        public override string Key => Credential.Key;
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        protected AuthenticationProvider(
+            TApiCredentials credentials,
+            TCredentialType? credential) : base(credentials)
+        {
+            if (credential == null)
+                throw new ArgumentException($"Missing \"{typeof(TCredentialType).Name}\" credentials on \"{credentials.GetType().Name}\"");
+
+            Credential = credential;
+        }
+        
+        /// <summary>
+        /// HMACSHA256 sign the data and return the hash
+        /// </summary>
+        /// <param name="data">Data to sign</param>
+        /// <param name="outputType">String type</param>
+        /// <returns></returns>
+        protected string SignHMACSHA256(string data, SignOutputType? outputType = null)
+            => SignHMACSHA256(Encoding.UTF8.GetBytes(data), outputType);
+
+        /// <summary>
+        /// HMACSHA256 sign the data and return the hash
+        /// </summary>
+        /// <param name="data">Data to sign</param>
+        /// <param name="outputType">String type</param>
+        /// <returns></returns>
+        protected string SignHMACSHA256(byte[] data, SignOutputType? outputType = null)
+        {
+            if (Credential is not HMACCredential hmacCredential)
+                throw new InvalidOperationException($"Invalid HMAC signing without HMAC credentials provided");
+
+            return SignHMACSHA256(hmacCredential, data, outputType);
+        }
+
+        /// <summary>
+        /// HMACSHA384 sign the data and return the hash
+        /// </summary>
+        /// <param name="data">Data to sign</param>
+        /// <param name="outputType">String type</param>
+        /// <returns></returns>
+        protected string SignHMACSHA384(string data, SignOutputType? outputType = null)
+            => SignHMACSHA384(Encoding.UTF8.GetBytes(data), outputType);
+
+        /// <summary>
+        /// HMACSHA384 sign the data and return the hash
+        /// </summary>
+        /// <param name="data">Data to sign</param>
+        /// <param name="outputType">String type</param>
+        /// <returns></returns>
+        protected string SignHMACSHA384(byte[] data, SignOutputType? outputType = null)
+        {
+            if (Credential is not HMACCredential hmacCredential)
+                throw new InvalidOperationException($"Invalid HMAC signing without HMAC credentials provided");
+
+            return SignHMACSHA384(hmacCredential, data, outputType);
+        }
+
+        /// <summary>
+        /// HMACSHA512 sign the data and return the hash
+        /// </summary>
+        /// <param name="data">Data to sign</param>
+        /// <param name="outputType">String type</param>
+        /// <returns></returns>
+        protected string SignHMACSHA512(string data, SignOutputType? outputType = null)
+            => SignHMACSHA512(Encoding.UTF8.GetBytes(data), outputType);
+
+        /// <summary>
+        /// HMACSHA512 sign the data and return the hash
+        /// </summary>
+        /// <param name="data">Data to sign</param>
+        /// <param name="outputType">String type</param>
+        /// <returns></returns>
+        protected string SignHMACSHA512(byte[] data, SignOutputType? outputType = null)
+        {
+            if (Credential is not HMACCredential hmacCredential)
+                throw new InvalidOperationException($"Invalid HMAC signing without HMAC credentials provided");
+
+            return SignHMACSHA512(hmacCredential, data, outputType);
+        }
+
+        /// <summary>
+        /// SHA256 sign the data
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="outputType"></param>
+        /// <returns></returns>
+        protected string SignRSASHA256(byte[] data, SignOutputType? outputType = null)
+        {
+            if (Credential is not RSACredential rsaCredential)
+                throw new InvalidOperationException($"Invalid RSA signing without RSA credentials provided");
+
+            return SignRSASHA256(rsaCredential, data, outputType);
+        }
+
+        /// <summary>
+        /// SHA384 sign the data
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="outputType"></param>
+        /// <returns></returns>
+        protected string SignRSASHA384(byte[] data, SignOutputType? outputType = null)
+        {
+            if (Credential is not RSACredential rsaCredential)
+                throw new InvalidOperationException($"Invalid RSA signing without RSA credentials provided");
+
+            return SignRSASHA384(rsaCredential, data, outputType);
+        }
+
+        /// <summary>
+        /// SHA512 sign the data
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="outputType"></param>
+        /// <returns></returns>
+        protected string SignRSASHA512(byte[] data, SignOutputType? outputType = null)
+        {
+            if (Credential is not RSACredential rsaCredential)
+                throw new InvalidOperationException($"Invalid RSA signing without RSA credentials provided");
+
+            return SignRSASHA512(rsaCredential, data, outputType);
+        }
+
+#if NET8_0_OR_GREATER
+        /// <summary>
+        /// Ed25519 sign the data 
+        /// </summary>
+        public string SignEd25519(string data, SignOutputType? outputType = null)
+            => SignEd25519(Encoding.ASCII.GetBytes(data), outputType);
+
+        /// <summary>
+        /// Ed25519 sign the data 
+        /// </summary>
+        public string SignEd25519(byte[] data, SignOutputType? outputType = null)
+        {
+            if (Credential is not Ed25519Credential ed25519Credential)
+                throw new InvalidOperationException($"Invalid Ed25519 signing without Ed25519 credentials provided");
+
+            return SignEd25519(ed25519Credential, data, outputType);
+        }
+#endif
     }
 }

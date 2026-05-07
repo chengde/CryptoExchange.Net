@@ -6,12 +6,8 @@ namespace CryptoExchange.Net.Objects.Options
     /// <summary>
     /// Options for a rest exchange client
     /// </summary>
-    public class RestExchangeOptions: ExchangeOptions
+    public class RestExchangeOptions : ExchangeOptions
     {
-        /// <summary>
-        /// Whether or not to automatically sync the local time with the server time
-        /// </summary>
-        public bool AutoTimestamp { get; set; }
 
         /// <summary>
         /// How often the timestamp adjustment between client and server is recalculated. If you need a very small TimeSpan here you're probably better of syncing your server time more often
@@ -37,10 +33,29 @@ namespace CryptoExchange.Net.Objects.Options
 #else
             = new Version(1, 1);
 #endif
+
         /// <summary>
-        /// Http client keep alive interval for keeping connections open
+        /// Http client keep alive interval for keeping connections open. Only applied when using dotnet8.0 or higher and dependency injection
         /// </summary>
         public TimeSpan? HttpKeepAliveInterval { get; set; } = TimeSpan.FromSeconds(15);
+#if NET5_0_OR_GREATER
+        /// <summary>
+        /// Enable multiple simultaneous HTTP 2 connections. Only applied when using dependency injection
+        /// </summary>
+        public bool HttpEnableMultipleHttp2Connections { get; set; } = false;
+        /// <summary>
+        /// Lifetime of pooled HTTP connections; the time before a connection is recreated. Only applied when using dependency injection
+        /// </summary>
+        public TimeSpan HttpPooledConnectionLifetime { get; set; } = TimeSpan.FromMinutes(15);
+        /// <summary>
+        /// Idle timeout of pooled HTTP connections; the time before an open connection is closed when there are no requests. Only applied when using dependency injection
+        /// </summary>
+        public TimeSpan HttpPooledConnectionIdleTimeout { get; set; } = TimeSpan.FromMinutes(2);
+        /// <summary>
+        /// Max number of connections per server. Only applied when using dependency injection
+        /// </summary>
+        public int HttpMaxConnectionsPerServer { get; set; } = int.MaxValue;
+#endif 
 
         /// <summary>
         /// Set the values of this options on the target options
@@ -50,7 +65,6 @@ namespace CryptoExchange.Net.Objects.Options
             item.OutputOriginalData = OutputOriginalData;
             item.AutoTimestamp = AutoTimestamp;
             item.TimestampRecalculationInterval = TimestampRecalculationInterval;
-            item.ApiCredentials = ApiCredentials?.Copy();
             item.Proxy = Proxy;
             item.RequestTimeout = RequestTimeout;
             item.RateLimiterEnabled = RateLimiterEnabled;
@@ -59,15 +73,19 @@ namespace CryptoExchange.Net.Objects.Options
             item.CachingMaxAge = CachingMaxAge;
             item.HttpVersion = HttpVersion;
             item.HttpKeepAliveInterval = HttpKeepAliveInterval;
+#if NET5_0_OR_GREATER
+            item.HttpMaxConnectionsPerServer = HttpMaxConnectionsPerServer;
+            item.HttpPooledConnectionLifetime = HttpPooledConnectionLifetime;
+            item.HttpPooledConnectionIdleTimeout = HttpPooledConnectionIdleTimeout;
+            item.HttpEnableMultipleHttp2Connections = HttpEnableMultipleHttp2Connections;
+#endif
             return item;
         }
     }
 
-    /// <summary>
-    /// Options for a rest exchange client
-    /// </summary>
-    /// <typeparam name="TEnvironment"></typeparam>
-    public class RestExchangeOptions<TEnvironment> : RestExchangeOptions where TEnvironment : TradeEnvironment
+    /// <inheritdoc />
+    public class RestExchangeOptions<TEnvironment> : RestExchangeOptions
+        where TEnvironment : TradeEnvironment
     {
         /// <summary>
         /// Trade environment. Contains info about URL's to use to connect to the API. To swap environment select another environment for
@@ -88,20 +106,32 @@ namespace CryptoExchange.Net.Objects.Options
         }
     }
 
-    /// <summary>
-    /// Options for a rest exchange client
-    /// </summary>
-    /// <typeparam name="TEnvironment"></typeparam>
-    /// <typeparam name="TApiCredentials"></typeparam>
-    public class RestExchangeOptions<TEnvironment, TApiCredentials> : RestExchangeOptions<TEnvironment> where TEnvironment : TradeEnvironment where TApiCredentials : ApiCredentials
+    /// <inheritdoc />
+    public class RestExchangeOptions<TEnvironment, TApiCredentials> : RestExchangeOptions<TEnvironment>
+        where TEnvironment : TradeEnvironment
+        where TApiCredentials : ApiCredentials
     {
+
         /// <summary>
         /// The api credentials used for signing requests to this API.
         /// </summary>        
-        public new TApiCredentials? ApiCredentials
+        public TApiCredentials? ApiCredentials { get; set; }
+
+        /// <summary>
+        /// Set the values of this options on the target options
+        /// </summary>
+        public new T Set<T>(T item) where T : RestExchangeOptions<TEnvironment, TApiCredentials>, new()
         {
-            get => (TApiCredentials?)base.ApiCredentials;
-            set => base.ApiCredentials = value;
+            base.Set(item);
+            item.ApiCredentials = (TApiCredentials?)ApiCredentials?.Copy();
+            return item;
         }
+
+        /// <inheritdoc />
+        public override string ToString()
+        {
+            return $"{base.ToString()}, ApiCredentials: {(ApiCredentials == null ? "-" : "set")}";
+        }
+
     }
 }

@@ -12,7 +12,8 @@ using CryptoExchange.Net.Sockets.Default.Interfaces;
 
 namespace CryptoExchange.Net.Testing.Implementations
 {
-    internal class TestSocket : IWebsocket
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+    public class TestSocket : IWebsocket
     {
         public event Action<string>? OnMessageSend;
 
@@ -28,7 +29,6 @@ namespace CryptoExchange.Net.Testing.Implementations
         public event Func<Exception, Task>? OnError;
 #pragma warning restore 0067
         public event Func<int, Task>? OnRequestSent;
-        public event Func<WebSocketMessageType, ReadOnlyMemory<byte>, Task>? OnStreamMessage;
         public event Func<Task>? OnOpen;
 
         public int Id { get; }
@@ -39,20 +39,17 @@ namespace CryptoExchange.Net.Testing.Implementations
         public Func<Task<Uri?>>? GetReconnectionUrl { get; set; }
 
         public static int lastId = 0;
+        public DateTime? LastReceiveTime { get; }
 #if NET9_0_OR_GREATER
         public static readonly Lock lastIdLock = new Lock();
 #else
         public static readonly object lastIdLock = new object();
 #endif
 
-        private bool _newDeserialization;
-
         public SocketConnection? Connection { get; set; }
 
-        public TestSocket(bool newDeserialization, string address)
+        public TestSocket(string address)
         {
-            _newDeserialization = newDeserialization;
-
             Uri = new Uri(address);
             lock (lastIdLock)
             {
@@ -107,20 +104,25 @@ namespace CryptoExchange.Net.Testing.Implementations
 
         public void InvokeMessage(string data)
         {
-            if (!_newDeserialization)
-            {
-                OnStreamMessage?.Invoke(WebSocketMessageType.Text, new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes(data))).Wait();
-            }
-            else
-            {
-                if (Connection == null)
-                    throw new ArgumentNullException(nameof(Connection));
+            if (Connection == null)
+                throw new ArgumentNullException(nameof(Connection));
 
-                Connection.HandleStreamMessage2(WebSocketMessageType.Text, Encoding.UTF8.GetBytes(data));
-            }
+            Connection.HandleStreamMessage2(WebSocketMessageType.Text, Encoding.UTF8.GetBytes(data));
         }
 
-        public Task ReconnectAsync() => Task.CompletedTask;
+        public async Task ReconnectAsync()
+        {
+            await Task.Delay(1).ConfigureAwait(false);
+
+            if (OnReconnecting != null)
+                await OnReconnecting().ConfigureAwait(false);
+
+            await Task.Delay(10).ConfigureAwait(false);
+
+            if (OnReconnected != null)
+                await OnReconnected().ConfigureAwait(false);
+        }
+
         public void Dispose() { }
 
         public void UpdateProxy(ApiProxy? proxy) => throw new NotImplementedException();

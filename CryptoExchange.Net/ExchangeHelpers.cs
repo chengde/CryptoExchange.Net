@@ -4,6 +4,7 @@ using CryptoExchange.Net.SharedApis;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading;
@@ -242,8 +243,7 @@ namespace CryptoExchange.Net
         /// <summary>
         /// Generate a long value
         /// </summary>
-        /// <param name="maxLength">Max character length</param>
-        /// <returns></returns>
+        /// <param name="maxLength">Max number of digits</param>
         public static long RandomLong(int maxLength)
         {
 #if NETSTANDARD2_1_OR_GREATER || NET9_0_OR_GREATER
@@ -257,6 +257,25 @@ namespace CryptoExchange.Net
                 return int.Parse(val.Substring(0, maxLength));
             else
                 return value;
+        }
+
+        /// <summary>
+        /// Generate a long value between two values
+        /// </summary>
+        /// <param name="minValue">Min value</param>
+        /// <param name="maxValue">Max value</param>
+        /// <returns></returns>
+        public static long RandomLong(long minValue, long maxValue)
+        {
+#if NET8_0_OR_GREATER
+            var buf = RandomNumberGenerator.GetBytes(8);
+#else
+            byte[] buf = new byte[8];
+            var random = new Random();
+            random.NextBytes(buf);
+#endif
+            long longRand = BitConverter.ToInt64(buf, 0);
+            return (Math.Abs(longRand % (maxValue - minValue)) + minValue);
         }
 
         /// <summary>
@@ -292,11 +311,11 @@ namespace CryptoExchange.Net
         /// <param name="request">The request parameters</param>
         /// <param name="ct">Cancellation token</param>
         /// <returns></returns>
-        public static async IAsyncEnumerable<ExchangeWebResult<T[]>> ExecutePages<T, U>(Func<U, INextPageToken?, CancellationToken, Task<ExchangeWebResult<T[]>>> paginatedFunc, U request, [EnumeratorCancellation]CancellationToken ct = default)
+        public static async IAsyncEnumerable<ExchangeWebResult<T[]>> ExecutePages<T, U>(Func<U, PageRequest?, CancellationToken, Task<ExchangeWebResult<T[]>>> paginatedFunc, U request, [EnumeratorCancellation]CancellationToken ct = default)
         {
             var result = new List<T>();
             ExchangeWebResult<T[]> batch;
-            INextPageToken? nextPageToken = null;
+            PageRequest? nextPageToken = null;
             while (true)
             {
                 batch = await paginatedFunc(request, nextPageToken, ct).ConfigureAwait(false);
@@ -305,10 +324,40 @@ namespace CryptoExchange.Net
                     break;
 
                 result.AddRange(batch.Data);
-                nextPageToken = batch.NextPageToken;
+                nextPageToken = batch.NextPageRequest;
                 if (nextPageToken == null)
                     break;
             }
+        }
+
+        /// <summary>
+        /// Apply filters to the data set
+        /// </summary>
+        /// <typeparam name="T">Type</typeparam>
+        /// <param name="data">Data set</param>
+        /// <param name="timeSelector">Time selector for the data</param>
+        /// <param name="startTime">Start time filter</param>
+        /// <param name="endTime">End time filter</param>
+        /// <param name="direction">Data direction</param>
+        public static IEnumerable<T> ApplyFilter<T>(
+            IEnumerable<T> data,
+            Func<T, DateTime> timeSelector,
+            DateTime? startTime,
+            DateTime? endTime,
+            DataDirection direction)
+        {
+            if (direction == DataDirection.Ascending)
+                data = data.OrderBy(timeSelector);
+            else
+                data = data.OrderByDescending(timeSelector);
+
+            if (startTime != null)
+                data = data.Where(x => timeSelector(x) >= startTime.Value);
+
+            if (endTime != null)
+                data = data.Where(x => timeSelector(x) < endTime.Value);
+
+            return data;
         }
 
         /// <summary>
@@ -481,6 +530,51 @@ namespace CryptoExchange.Net
 
             // Unknown decimal format, return null
             return null;
+        }
+
+        /// <summary>
+        /// Convert byte array to hex string
+        /// </summary>
+        /// <param name="buff"></param>
+        /// <returns></returns>
+        public static string BytesToHexString(byte[] buff)
+            => BytesToHexString(new ArraySegment<byte>(buff));
+
+        /// <summary>
+        /// Convert byte array to hex string
+        /// </summary>
+        /// <param name="buff"></param>
+        /// <returns></returns>
+        public static string BytesToHexString(ArraySegment<byte> buff)
+        {
+#if NET9_0_OR_GREATER
+            return Convert.ToHexString(buff);
+#else
+            var result = string.Empty;
+            foreach (var t in buff)
+                result += t.ToString("X2");
+            return result;
+#endif
+        }
+
+        /// <summary>
+        /// Convert a hex encoded string to byte array
+        /// </summary>
+        /// <param name="hexString"></param>
+        /// <returns></returns>
+        public static byte[] HexToBytesString(string hexString)
+        {
+            if (hexString.StartsWith("0x"))
+                hexString = hexString.Substring(2);
+
+            byte[] bytes = new byte[hexString.Length / 2];
+            for (int i = 0; i < hexString.Length; i += 2)
+            {
+                string hexSubstring = hexString.Substring(i, 2);
+                bytes[i / 2] = Convert.ToByte(hexSubstring, 16);
+            }
+
+            return bytes;
         }
     }
 }

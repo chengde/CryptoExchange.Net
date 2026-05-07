@@ -1,6 +1,7 @@
 ﻿using CryptoExchange.Net.Authentication;
+using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Objects.Options;
-using CryptoExchange.Net.UnitTests.TestImplementations;
+using CryptoExchange.Net.UnitTests.Implementations;
 using NUnit.Framework;
 using System;
 
@@ -10,9 +11,9 @@ namespace CryptoExchange.Net.UnitTests
     public class OptionsTests
     {
         [TearDown]
-        public void Init()
+        public void TearDown()
         {
-            TestClientOptions.Default = new TestClientOptions
+            TestRestOptions.Default = new TestRestOptions
             {
             };
         }
@@ -29,135 +30,123 @@ namespace CryptoExchange.Net.UnitTests
             // act
             // assert
             Assert.Throws(typeof(ArgumentException),
-                () => new RestExchangeOptions<TestEnvironment, ApiCredentials>() { ApiCredentials = new ApiCredentials(key, secret) });
+                () => {
+                    var opts = new TestRestOptions()
+                    {
+                        ApiCredentials = new TestCredentials(key, secret)
+                    };
+                    opts.ApiCredentials.Validate();
+                });
         }
 
         [Test]
         public void TestBasicOptionsAreSet()
         {
             // arrange, act
-            var options = new TestClientOptions
+            var options = new TestRestOptions
             {
-                ApiCredentials = new ApiCredentials("123", "456"),
-                ReceiveWindow = TimeSpan.FromSeconds(10)
+                ApiCredentials = new TestCredentials("123", "456"),
+                RequestTimeout = TimeSpan.FromSeconds(10)
             };
 
             // assert
-            Assert.That(options.ReceiveWindow == TimeSpan.FromSeconds(10));
+            Assert.That(options.RequestTimeout == TimeSpan.FromSeconds(10));
             Assert.That(options.ApiCredentials.Key == "123");
             Assert.That(options.ApiCredentials.Secret == "456");
         }
 
         [Test]
-        public void TestApiOptionsAreSet()
+        public void TestSetOptionsRest()
         {
-            // arrange, act
-            var options = new TestClientOptions();
-            options.Api1Options.ApiCredentials = new ApiCredentials("123", "456");
-            options.Api2Options.ApiCredentials = new ApiCredentials("789", "101");
-
-            // assert
-            Assert.That(options.Api1Options.ApiCredentials.Key == "123");
-            Assert.That(options.Api1Options.ApiCredentials.Secret == "456");
-            Assert.That(options.Api2Options.ApiCredentials.Key == "789");
-            Assert.That(options.Api2Options.ApiCredentials.Secret == "101");
-        }
-
-        [Test]
-        public void TestClientUsesCorrectOptions()
-        {
-            var client = new TestRestClient(options => {
-                options.Api1Options.ApiCredentials = new ApiCredentials("111", "222");
-                options.ApiCredentials = new ApiCredentials("333", "444");
-            });
-
-            var authProvider1 = (TestAuthProvider)client.Api1.AuthenticationProvider;
-            var authProvider2 = (TestAuthProvider)client.Api2.AuthenticationProvider;
-            Assert.That(authProvider1.GetKey() == "111");
-            Assert.That(authProvider1.GetSecret() == "222");
-            Assert.That(authProvider2.GetKey() == "333");
-            Assert.That(authProvider2.GetSecret() == "444");
-        }
-
-        [Test]
-        public void TestClientUsesCorrectOptionsWithDefault()
-        {
-            TestClientOptions.Default.ApiCredentials = new ApiCredentials("123", "456");
-            TestClientOptions.Default.Api1Options.ApiCredentials = new ApiCredentials("111", "222");
-
             var client = new TestRestClient();
+            client.SetOptions(new UpdateOptions
+            {
+                RequestTimeout = TimeSpan.FromSeconds(2),
+                Proxy = new ApiProxy("http://testproxy", 1234)
+            });
 
-            var authProvider1 = (TestAuthProvider)client.Api1.AuthenticationProvider;
-            var authProvider2 = (TestAuthProvider)client.Api2.AuthenticationProvider;
-            Assert.That(authProvider1.GetKey() == "111");
-            Assert.That(authProvider1.GetSecret() == "222");
-            Assert.That(authProvider2.GetKey() == "123");
-            Assert.That(authProvider2.GetSecret() == "456");
-
-            // Cleanup static values
-            TestClientOptions.Default.ApiCredentials = null;
-            TestClientOptions.Default.Api1Options.ApiCredentials = null;
+            Assert.That(client.ApiClient1.ClientOptions.Proxy, Is.Not.Null);
+            Assert.That(client.ApiClient1.ClientOptions.Proxy!.Host, Is.EqualTo("http://testproxy"));
+            Assert.That(client.ApiClient1.ClientOptions.Proxy.Port, Is.EqualTo(1234));
+            Assert.That(client.ApiClient1.ClientOptions.RequestTimeout, Is.EqualTo(TimeSpan.FromSeconds(2)));
         }
 
         [Test]
-        public void TestClientUsesCorrectOptionsWithOverridingDefault()
+        public void TestSetOptionsRestWithCredentials()
         {
-            TestClientOptions.Default.ApiCredentials = new ApiCredentials("123", "456");
-            TestClientOptions.Default.Api1Options.ApiCredentials = new ApiCredentials("111", "222");
-
-            var client = new TestRestClient(options =>
+            var client = new TestRestClient();
+            client.SetOptions(new UpdateOptions<TestCredentials>
             {
-                options.Api1Options.ApiCredentials = new ApiCredentials("333", "444");
-                options.Environment = new TestEnvironment("Test", "https://test.test");
+                ApiCredentials = new TestCredentials("123", "456"),
+                RequestTimeout = TimeSpan.FromSeconds(2),
+                Proxy = new ApiProxy("http://testproxy", 1234)
             });
 
-            var authProvider1 = (TestAuthProvider)client.Api1.AuthenticationProvider;
-            var authProvider2 = (TestAuthProvider)client.Api2.AuthenticationProvider;
-            Assert.That(authProvider1.GetKey() == "333");
-            Assert.That(authProvider1.GetSecret() == "444");
-            Assert.That(authProvider2.GetKey() == "123");
-            Assert.That(authProvider2.GetSecret() == "456");
-            Assert.That(client.Api2.BaseAddress == "https://localhost:123");
+            Assert.That(client.ApiClient1.ApiCredentials, Is.Not.Null);
+            Assert.That(client.ApiClient1.ApiCredentials!.Key, Is.EqualTo("123"));
+            Assert.That(client.ApiClient1.ClientOptions.Proxy, Is.Not.Null);
+            Assert.That(client.ApiClient1.ClientOptions.Proxy!.Host, Is.EqualTo("http://testproxy"));
+            Assert.That(client.ApiClient1.ClientOptions.Proxy.Port, Is.EqualTo(1234));
+            Assert.That(client.ApiClient1.ClientOptions.RequestTimeout, Is.EqualTo(TimeSpan.FromSeconds(2)));
+        }
 
-            // Cleanup static values
-            TestClientOptions.Default.ApiCredentials = null;
-            TestClientOptions.Default.Api1Options.ApiCredentials = null;
+        [Test]
+        public void TestWhenUpdatingSettingsExistingClientsAreNotAffected()
+        {
+            TestRestOptions.Default = new TestRestOptions
+            {
+                ApiCredentials = new TestCredentials("111", "222"),
+                RequestTimeout = TimeSpan.FromSeconds(1),
+            };
+
+            var client1 = new TestRestClient();
+
+            Assert.That(client1.ClientOptions.RequestTimeout, Is.EqualTo(TimeSpan.FromSeconds(1)));
+            Assert.That(client1.ClientOptions.ApiCredentials!.Key, Is.EqualTo("111"));
+
+            TestRestOptions.Default.ApiCredentials = new TestCredentials("333", "444");
+            TestRestOptions.Default.RequestTimeout = TimeSpan.FromSeconds(2);
+
+            var client2 = new TestRestClient();
+
+            Assert.That(client2.ClientOptions.RequestTimeout, Is.EqualTo(TimeSpan.FromSeconds(2)));
+            Assert.That(client2.ClientOptions.ApiCredentials!.Key, Is.EqualTo("333"));
         }
     }
 
-    public class TestClientOptions: RestExchangeOptions<TestEnvironment, ApiCredentials>
-    {
-        /// <summary>
-        /// Default options for the futures client
-        /// </summary>
-        public static TestClientOptions Default { get; set; } = new TestClientOptions()
-        {
-            Environment = new TestEnvironment("test", "https://test.com")
-        };
+    //public class TestClientOptions: RestExchangeOptions<TestEnvironment, HMACCredential>
+    //{
+    //    /// <summary>
+    //    /// Default options for the futures client
+    //    /// </summary>
+    //    public static TestClientOptions Default { get; set; } = new TestClientOptions()
+    //    {
+    //        Environment = new TestEnvironment("test", "https://test.com")
+    //    };
 
-        /// <summary>
-        /// ctor
-        /// </summary>
-        public TestClientOptions()
-        {
-            Default?.Set(this);
-        }
+    //    /// <summary>
+    //    /// ctor
+    //    /// </summary>
+    //    public TestClientOptions()
+    //    {
+    //        Default?.Set(this);
+    //    }
 
-        /// <summary>
-        /// The default receive window for requests
-        /// </summary>
-        public TimeSpan ReceiveWindow { get; set; } = TimeSpan.FromSeconds(5);
+    //    /// <summary>
+    //    /// The default receive window for requests
+    //    /// </summary>
+    //    public TimeSpan ReceiveWindow { get; set; } = TimeSpan.FromSeconds(5);
 
-        public RestApiOptions Api1Options { get; private set; } = new RestApiOptions();
+    //    public RestApiOptions Api1Options { get; private set; } = new RestApiOptions();
 
-        public RestApiOptions Api2Options { get; set; } = new RestApiOptions();
+    //    public RestApiOptions Api2Options { get; set; } = new RestApiOptions();
 
-        internal TestClientOptions Set(TestClientOptions targetOptions)
-        {
-            targetOptions = base.Set<TestClientOptions>(targetOptions);
-            targetOptions.Api1Options = Api1Options.Set(targetOptions.Api1Options);
-            targetOptions.Api2Options = Api2Options.Set(targetOptions.Api2Options);
-            return targetOptions;
-        }
-    }
+    //    internal TestClientOptions Set(TestClientOptions targetOptions)
+    //    {
+    //        targetOptions = base.Set<TestClientOptions>(targetOptions);
+    //        targetOptions.Api1Options = Api1Options.Set(targetOptions.Api1Options);
+    //        targetOptions.Api2Options = Api2Options.Set(targetOptions.Api2Options);
+    //        return targetOptions;
+    //    }
+    //}
 }

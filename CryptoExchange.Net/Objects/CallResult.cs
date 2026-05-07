@@ -154,6 +154,9 @@ namespace CryptoExchange.Net.Objects
         /// <returns></returns>
         public CallResult AsDataless()
         {
+            if (Error != null )
+                return new CallResult(Error);
+
             return SuccessResult;
         }
 
@@ -531,11 +534,11 @@ namespace CryptoExchange.Net.Objects
         /// <param name="exchange">The exchange</param>
         /// <param name="tradeMode">Trade mode the result applies to</param>
         /// <param name="data">Data</param>
-        /// <param name="nextPageToken">Next page token</param>
+        /// <param name="nextPageRequest">Next page request</param>
         /// <returns></returns>
-        public ExchangeWebResult<K> AsExchangeResult<K>(string exchange, TradingMode tradeMode, [AllowNull] K data, INextPageToken? nextPageToken = null)
+        public ExchangeWebResult<K> AsExchangeResult<K>(string exchange, TradingMode tradeMode, [AllowNull] K data, PageRequest? nextPageRequest = null)
         {
-            return new ExchangeWebResult<K>(exchange, tradeMode, As<K>(data), nextPageToken);
+            return new ExchangeWebResult<K>(exchange, tradeMode, As<K>(data), nextPageRequest);
         }
 
         /// <summary>
@@ -545,11 +548,11 @@ namespace CryptoExchange.Net.Objects
         /// <param name="exchange">The exchange</param>
         /// <param name="tradeModes">Trade modes the result applies to</param>
         /// <param name="data">Data</param>
-        /// <param name="nextPageToken">Next page token</param>
+        /// <param name="nextPageRequest">Next page token</param>
         /// <returns></returns>
-        public ExchangeWebResult<K> AsExchangeResult<K>(string exchange, TradingMode[]? tradeModes, [AllowNull] K data, INextPageToken? nextPageToken = null)
+        public ExchangeWebResult<K> AsExchangeResult<K>(string exchange, TradingMode[]? tradeModes, [AllowNull] K data, PageRequest? nextPageRequest = null)
         {
-            return new ExchangeWebResult<K>(exchange, tradeModes, As<K>(data), nextPageToken);
+            return new ExchangeWebResult<K>(exchange, tradeModes, As<K>(data), nextPageRequest);
         }
 
         /// <summary>

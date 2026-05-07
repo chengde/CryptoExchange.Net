@@ -19,6 +19,16 @@ namespace CryptoExchange.Net.Objects.Sockets
         public DateTime? DataTime { get; set; }
 
         /// <summary>
+        /// The timestamp of the data in local time. Note that this is an estimation based on average delay from the server.
+        /// </summary>
+        public DateTime? DataTimeLocal { get; set; }
+
+        /// <summary>
+        /// The age of the data. Note that this is an estimation based on average delay from the server.
+        /// </summary>
+        public TimeSpan? DataAge => DateTime.UtcNow - DataTimeLocal;
+
+        /// <summary>
         /// The stream producing the update
         /// </summary>
         public string? StreamId { get; set; }
@@ -42,6 +52,11 @@ namespace CryptoExchange.Net.Objects.Sockets
         /// Type of update
         /// </summary>
         public SocketUpdateType? UpdateType { get; set; }
+
+        /// <summary>
+        /// Sequence number of the update
+        /// </summary>
+        public long? SequenceNumber { get; set; }
 
         /// <summary>
         /// ctor
@@ -117,11 +132,27 @@ namespace CryptoExchange.Net.Objects.Sockets
         }
 
         /// <summary>
+        /// Specify the sequence number of the update
+        /// </summary>
+        public DataEvent<T> WithSequenceNumber(long? sequenceNumber)
+        {
+            SequenceNumber = sequenceNumber;
+            return this;
+        }
+
+        /// <summary>
         /// Specify the data timestamp
         /// </summary>
-        public DataEvent<T> WithDataTimestamp(DateTime? timestamp)
+        public DataEvent<T> WithDataTimestamp(DateTime? timestamp, TimeSpan? offset)
         {
+            if (timestamp == null || timestamp == default(DateTime))
+                return this;
+
             DataTime = timestamp;
+            if (offset == null)
+                return this;
+
+            DataTimeLocal = DataTime + offset;
             return this;
         }
 
@@ -139,6 +170,6 @@ namespace CryptoExchange.Net.Objects.Sockets
         }
 
         /// <inheritdoc />
-        public override string ToString() => base.ToString().TrimEnd('-') + Data?.ToString();
+        public override string ToString() => base.ToString().TrimEnd(' ', '-') + " - " + Data?.ToString();
     }
 }

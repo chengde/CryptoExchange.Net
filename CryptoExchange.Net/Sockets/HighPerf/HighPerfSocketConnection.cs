@@ -233,7 +233,6 @@ namespace CryptoExchange.Net.Sockets.HighPerf
         {
             Status = SocketStatus.Disposed;
             periodicEvent?.Set();
-            periodicEvent?.Dispose();
             _socket.Dispose();
         }
 
@@ -245,7 +244,9 @@ namespace CryptoExchange.Net.Sockets.HighPerf
         public virtual ValueTask<CallResult> SendAsync<T>(T obj)
         {
             if (_serializer is IByteMessageSerializer byteSerializer)
+            {
                 return SendBytesAsync(byteSerializer.Serialize(obj));
+            }
             else if (_serializer is IStringMessageSerializer stringSerializer)
             {
                 if (obj is string str)

@@ -16,10 +16,6 @@ namespace CryptoExchange.Net.Sockets.Default.Interfaces
         /// </summary>
         event Func<Task> OnClose;
         /// <summary>
-        /// Websocket message received event
-        /// </summary>
-        event Func<WebSocketMessageType, ReadOnlyMemory<byte>, Task> OnStreamMessage;
-        /// <summary>
         /// Websocket sent event, RequestId as parameter
         /// </summary>
         event Func<int, Task> OnRequestSent;
@@ -72,6 +68,10 @@ namespace CryptoExchange.Net.Sockets.Default.Interfaces
         /// Whether the socket connection is open
         /// </summary>
         bool IsOpen { get; }
+        /// <summary>
+        /// Last timestamp something was received from the server
+        /// </summary>
+        DateTime? LastReceiveTime { get; }
         /// <summary>
         /// Connect the socket
         /// </summary>

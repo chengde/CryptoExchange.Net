@@ -10,7 +10,7 @@ For more information on what CryptoExchange.Net and it's client libraries offers
 ### CryptoExchange.Net Ecosystem
 Full list of all libraries part of the CryptoExchange.Net ecosystem. Consider using a referral link to support development, as well as potentially get some trading fee discount!
 
-||Exchange|Type|Repository|Nuget|Referral Link|Referral Fee Discount|
+||API|Type|Repository|Nuget|Referral Link|Referral Fee Discount|
 |--|--|--|--|--|--|--|
 |![Aster](https://raw.githubusercontent.com/JKorf/Aster.Net/refs/heads/main/Aster.Net/Icon/icon.png)|Aster|DEX|[JKorf/Aster.Net](https://github.com/JKorf/Aster.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.Aster.net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.Aster.Net)|[Link](https://www.asterdex.com/en/referral/FD2E11)|4%|
 |![Binance](https://raw.githubusercontent.com/JKorf/Binance.Net/refs/heads/master/Binance.Net/Icon/icon.png)|Binance|CEX|[JKorf/Binance.Net](https://github.com/JKorf/Binance.Net)|[![Nuget version](https://img.shields.io/nuget/v/Binance.net.svg?style=flat-square)](https://www.nuget.org/packages/Binance.Net)|[Link](https://accounts.binance.com/register?ref=X5K3F2ZG)|20%|
@@ -19,6 +19,7 @@ Full list of all libraries part of the CryptoExchange.Net ecosystem. Consider us
 |![Bitget](https://raw.githubusercontent.com/JKorf/Bitget.Net/refs/heads/main/Bitget.Net/Icon/icon.png)|Bitget|CEX|[JKorf/Bitget.Net](https://github.com/JKorf/Bitget.Net)|[![Nuget version](https://img.shields.io/nuget/v/JK.Bitget.net.svg?style=flat-square)](https://www.nuget.org/packages/JK.Bitget.Net)|[Link](https://partner.bitget.com/bg/1qlf6pj1)|20%|
 |![BitMart](https://raw.githubusercontent.com/JKorf/BitMart.Net/refs/heads/main/BitMart.Net/Icon/icon.png)|BitMart|CEX|[JKorf/BitMart.Net](https://github.com/JKorf/BitMart.Net)|[![Nuget version](https://img.shields.io/nuget/v/BitMart.net.svg?style=flat-square)](https://www.nuget.org/packages/BitMart.Net)|[Link](https://www.bitmart.com/invite/JKorfAPI/en-US)|30%|
 |![BitMEX](https://raw.githubusercontent.com/JKorf/BitMEX.Net/refs/heads/main/BitMEX.Net/Icon/icon.png)|BitMEX|CEX|[JKorf/BitMEX.Net](https://github.com/JKorf/BitMEX.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.BitMEX.net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.BitMEX.Net)|[Link](https://www.bitmex.com/app/register/94f98e)|30%|
+|![Bitstamp](https://raw.githubusercontent.com/JKorf/Bitstamp.Net/refs/heads/main/Bitstamp.Net/Icon/icon.png)|Bitstamp|CEX|[JKorf/Bitstamp.Net](https://github.com/JKorf/Bitstamp.Net)|[![Nuget version](https://img.shields.io/nuget/v/Bitstamp.net.svg?style=flat-square)](https://www.nuget.org/packages/Bitstamp.Net)|-|-|
 |![BloFin](https://raw.githubusercontent.com/JKorf/BloFin.Net/refs/heads/main/BloFin.Net/Icon/icon.png)|BloFin|CEX|[JKorf/BloFin.Net](https://github.com/JKorf/BloFin.Net)|[![Nuget version](https://img.shields.io/nuget/v/BloFin.net.svg?style=flat-square)](https://www.nuget.org/packages/BloFin.Net)|-|-|
 |![Bybit](https://raw.githubusercontent.com/JKorf/Bybit.Net/refs/heads/main/ByBit.Net/Icon/icon.png)|Bybit|CEX|[JKorf/Bybit.Net](https://github.com/JKorf/Bybit.Net)|[![Nuget version](https://img.shields.io/nuget/v/Bybit.net.svg?style=flat-square)](https://www.nuget.org/packages/Bybit.Net)|[Link](https://partner.bybit.com/b/jkorf)|-|
 |![Coinbase](https://raw.githubusercontent.com/JKorf/Coinbase.Net/refs/heads/main/Coinbase.Net/Icon/icon.png)|Coinbase|CEX|[JKorf/Coinbase.Net](https://github.com/JKorf/Coinbase.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.Coinbase.Net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.Coinbase.Net)|[Link](https://advanced.coinbase.com/join/T6H54H8)|-|
@@ -34,8 +35,10 @@ Full list of all libraries part of the CryptoExchange.Net ecosystem. Consider us
 |![Kucoin](https://raw.githubusercontent.com/JKorf/Kucoin.Net/refs/heads/master/Kucoin.Net/Icon/icon.png)|Kucoin|CEX|[JKorf/Kucoin.Net](https://github.com/JKorf/Kucoin.Net)|[![Nuget version](https://img.shields.io/nuget/v/Kucoin.net.svg?style=flat-square)](https://www.nuget.org/packages/Kucoin.Net)|[Link](https://www.kucoin.com/r/rf/QBS4FPED)|-|
 |![Mexc](https://raw.githubusercontent.com/JKorf/Mexc.Net/refs/heads/main/Mexc.Net/Icon/icon.png)|Mexc|CEX|[JKorf/Mexc.Net](https://github.com/JKorf/Mexc.Net)|[![Nuget version](https://img.shields.io/nuget/v/JK.Mexc.net.svg?style=flat-square)](https://www.nuget.org/packages/JK.Mexc.Net)|-|-|
 |![OKX](https://raw.githubusercontent.com/JKorf/OKX.Net/refs/heads/main/OKX.Net/Icon/icon.png)|OKX|CEX|[JKorf/OKX.Net](https://github.com/JKorf/OKX.Net)|[![Nuget version](https://img.shields.io/nuget/v/JK.OKX.net.svg?style=flat-square)](https://www.nuget.org/packages/JK.OKX.Net)|[Link](https://www.okx.com/join/14592495)|20%|
+|![Polymarket](https://raw.githubusercontent.com/JKorf/Polymarket.Net/main/Polymarket.Net/Icon/icon.png)|Polymarket|DEX|[JKorf/Polymarket.Net](https://github.com/JKorf/Polymarket.Net)|[![Nuget version](https://img.shields.io/nuget/v/Polymarket.net.svg?style=flat-square)](https://www.nuget.org/packages/Polymarket.Net)|-|-|
 |![Toobit](https://raw.githubusercontent.com/JKorf/Toobit.Net/refs/heads/main/Toobit.Net/Icon/icon.png)|Toobit|CEX|[JKorf/Toobit.Net](https://github.com/JKorf/Toobit.Net)|[![Nuget version](https://img.shields.io/nuget/v/Toobit.net.svg?style=flat-square)](https://www.nuget.org/packages/Toobit.Net)|[Link](https://www.toobit.com/en-US/register?invite_code=zsV19h)|-|
 |![Upbit](https://raw.githubusercontent.com/JKorf/Upbit.Net/refs/heads/main/Upbit.Net/Icon/icon.png)|Upbit|CEX|[JKorf/Upbit.Net](https://github.com/JKorf/Upbit.Net)|[![Nuget version](https://img.shields.io/nuget/v/JKorf.Upbit.net.svg?style=flat-square)](https://www.nuget.org/packages/JKorf.Upbit.Net)|-|-|
+|![Weex](https://raw.githubusercontent.com/JKorf/Weex.Net/refs/heads/main/Weex.Net/Icon/icon.png)|Weex|CEX|[JKorf/Weex.Net](https://github.com/JKorf/Weex.Net)|[![Nuget version](https://img.shields.io/nuget/v/Weex.net.svg?style=flat-square)](https://www.nuget.org/packages/Weex.Net)|-|-|
 |![WhiteBit](https://raw.githubusercontent.com/JKorf/WhiteBit.Net/refs/heads/main/WhiteBit.Net/Icon/icon.png)|WhiteBit|CEX|[JKorf/WhiteBit.Net](https://github.com/JKorf/WhiteBit.Net)|[![Nuget version](https://img.shields.io/nuget/v/WhiteBit.net.svg?style=flat-square)](https://www.nuget.org/packages/WhiteBit.Net)|[Link](https://whitebit.com/referral/a8e59b59-186c-4662-824c-3095248e0edf)|-|
 |![XT](https://raw.githubusercontent.com/JKorf/XT.Net/refs/heads/main/XT.Net/Icon/icon.png)|XT|CEX|[JKorf/XT.Net](https://github.com/JKorf/XT.Net)|[![Nuget version](https://img.shields.io/nuget/v/XT.net.svg?style=flat-square)](https://www.nuget.org/packages/XT.Net)|[Link](https://www.xt.com/ru/accounts/register?ref=CZG39C)|25%|
 
@@ -66,6 +69,199 @@ Make a one time donation in a crypto currency of your choice. If you prefer to d
 Alternatively, sponsor me on Github using [Github Sponsors](https://github.com/sponsors/JKorf). 
 
 ## Release notes
+* Version 11.1.1 - 10 Apr 2026
+    * Added Reset functionality to rate limiter implementation
+    * Added reset of rate limit per connection when connection is disconnected
+
+* Version 11.1.0 - 09 Apr 2026
+    * Updated WebSocket message routing improving performance for scenarios with multiple different subscriptions and topics
+    * Added AddCommaSeparated helper for Enum value arrays to ParameterCollection
+    * Added SharedRestRequestValidator for testing Shared interface implementations
+    * Improved EnumConverter performance and removed string allocation for happy path
+    * Fixed concurrency issue when using rate limit guard for multiple gates
+    * Fixed CreateParamString extension method for ArrayParametersSerialization.Json
+    * Fixed Shared GetOrderBookOptions and GetRecentTradeOptions base validations not being called
+    * Fixed CallResult returning success result in AsDataless even if Error is set
+
+* Version 11.0.3 - 30 Mar 2026
+    * Updated Enum converter to only warn once per type for null/empty value for non-nullable enum property
+
+* Version 11.0.2 - 26 Mar 2026
+    * Updated SetOptions logic to allow calling on client without credentials
+
+* Version 11.0.1 - 24 Mar 2026
+    * Fixed CreateParamString method for arrays of value types
+
+* Version 11.0.0 - 23 Mar 2026
+    * Updated API credential logic, exchange implementation are expected to provide their own credentials implementation with ApiCredentials as base class
+    * Removed ApiCredentials implementation used by most exchanges
+    * Removed ApiCredentialsType Enum
+    * Added CredentialSet base class and implementations for defining different API credentials
+    * Added optional type param to AuthenticationProvider for the specific API credential type to improve type safety
+    * Moved AuthenticationProvider/ApiCredentials from BaseApiClient to RestApiClient/SocketApiClient base classes
+    * Added optional type params to RestApiClient/SocketApiClient base class to specify the AuthenticationProvider type and credentials type to improve type safety
+    * Moved SetOptions/SetApiCredentials from BaseApiClient to RestApiClient/SocketApiClient
+    * Extracted LibraryOptions<TRestOptions, TSocketOptions, TEnvironment> without TApiCredentials for libraries without API credentials
+    * Removed ApiCredentials from ApiOptions, credentials can only be configured at library, rest or socket level
+    * Added EnvironmentName property to RestApiClient/SocketApiClient
+    * Added Unknown enum value to Shared interfaces SharedOrderStatus, SharedTransferStatus and SharedTriggerOrderStatus enums
+    * Updated Enum converter to map value to an undefined Enum value instead of the first Enum value
+    * Added support for checking for missing fields on RestIntegrationTest
+    * Added Web3 signing utilities
+    * Added BytesToHexString and HexToBytesString to ExchangeHelpers static class
+    * Fixed bug where WebSocket connections are not reconnected when configuring Proxy with SetUpdates
+    * Removed legacy CryptoBaseClient, CryptoRestClient and CryptoSocketClient
+
+* Version 10.8.0 - 06 Mar 2026
+    * Added `RequestBodyContentEncoding` and `OmitContentTypeHeaderWithoutContent` config to RestApiClient
+    * Added `ForcePathEndWithSlash` setting to RequestDefinition
+    * Added `encoding` parameter to SetContent on REST Request
+
+* Version 10.7.2 - 02 Mar 2026
+    * Added small overlap in UserDataTracker polling logic to account for API endpoints not immediately having the data available
+
+* Version 10.7.1 - 25 Feb 2026
+    * Fixed deadlock scenario in websocket connection when subscribe and handling message concurrently
+
+* Version 10.7.0 - 24 Feb 2026
+    * Added parsing of REST response data up to 128 characters for error responses
+    * Added check for invalid json in JsonSocketMessageHandler
+    * Added virtual GetTypeIdentifierNonJson for handling non-json messages in JsonSocketMessageHandler
+    * Added additional options to Rest client options for configuring HttpClient
+    * Updated INextPageToken parameter on Shared interfaces to PageRequest type, functionality unchanged
+    * Added SupportsAscending and SupportsDescending properties to PaginatedEndpointOptions to expose supported data directions
+    * Added MaxAge property to PaginatedEndpointOptions to expose the max age of data that can be requested
+    * Added Direction property to Shared interfaces paginated requests to configure pagination data direction
+    * Removed PaginationSupport property from PaginatedEndpointOptions, replaced by above new properties
+    * Updated Shared GetTradeHistoryRequest EndTime property to be optional
+    * Updated I(Futures/Spot)OrderRestClient.GetClosed(Futures/Spot)OrdersOptions from PaginatedEndpointOptions<GetClosedOrdersRequest> to GetClosedOrdersOptions
+    * Updated I(Futures/Spot)OrderRestClient.Get(Futures/Spot)UserTradesOptions from PaginatedEndpointOptions<GetUserTradesRequest> to GetUserTradesOptions
+    * Updated rate limiting PathStartFilter to ignore added or missing slash before the path
+    * Updated internal lock for subscription to ReaderWriterLockSlim on SocketConnection
+    * Removed check for OnlyTrackProvidedSymbols in combination with empty TrackedSymbols list
+    * Fixed KlineTracker throwing exception if there is no data in the initial snapshot
+
+* Version 10.6.2 - 17 Feb 2026
+    * Fix for websocket queries which don't expects response getting stuck in subscribing state
+
+* Version 10.6.1 - 16 Feb 2026
+    * Fixed exception when stopping SymbolOrderBook instance when update is received while closing
+
+* Version 10.6.0 - 16 Feb 2026
+    * Updated symbol tracking logic on UserDataTracker, now is per UserDataTracker instead of per topic
+    * Added check for startTime filter for polling being to close to current time which can cause issues if time isn't in sync with server
+    * Added AddTrackedSymbolsAsync and RemoveTrackedSymbolAsync methods to UserDataTracker
+    * Added check SymbolOrderBook is still alive when trying to add updates to prevent unnoticed growing in the background when subscription isn't closed while book is
+
+* Version 10.5.4 - 12 Feb 2026
+    * Fixed type check ExchangeParameters GetValue
+    * Fixed bug in polling time filter for UserDataTracker item
+
+* Version 10.5.3 - 11 Feb 2026
+    * Fixed orders getting incorrectly set to canceled state for UserDataTracker spot and futures orders
+    * Added check EnumConverter to detect undefined int value parsing
+
+* Version 10.5.2 - 10 Feb 2026
+    * Added check for subscribe queries with TimeoutBehavior.Success to complete when subscription has received update
+    * Added call to ApiClient.HandleUnhandledMessage when no websocket message processor is found based on topic to allow additional processing
+    * Combined websocket connection subscribe and re-subscribe logic
+    * Set websocket query completed after setting Result
+
+* Version 10.5.1 - 10 Feb 2026
+    * Fixed trading mode selection for futures listen key methods in FuturesUserDataTracker
+
+* Version 10.5.0 - 10 Feb 2026
+    * Added keep alive for listenkeys to UserDataTracker
+    * Updated logging unmatched websocket message
+    * Updated websocket message forwarding logic
+    * Fixed bug in IncomingKbps calculation
+    * Fixed bug in SendAsync in SocketConnection
+    * Fixed bug in UserDataTracker orders logic incorrectly setting order to canceled status
+
+* Version 10.4.1 - 06 Feb 2026
+    * Updated UserDataTracker to only track symbol when position size > 0
+    * Update UserDataTracker log verbosity
+
+* Version 10.4.0 - 06 Feb 2026
+    * Added user data tracking logic
+    * Added LastReceiveTime, SocketStatus and SubscriptionStatus properties to UpdateSubscription
+    * Added SharedTransferStatus Enum and property to SharedDeposit
+    * Added PositionMode property to SharedPosition model
+    * Added IsZero property to SharedQuantity
+    * Added additional methods for requesting supported symbols to Shared ISpotSymbolRestClient/IFuturesSymbolRestClient interfaces
+    * Added Disposed property on BaseClient and IRestClient/ISocketClient interfaces
+    * Added AutoTimestamp option for socket client
+    * Renamed IWebSocket LastActionTime to LastReceiveTime
+    * Refactored AsyncResetEvent implementation
+    * Updated CryptoExchangeWebsocketClient LastReceiveTime logic
+    * Updated Subscription status change event handler to run sync instead of separate task
+    * Updated Interval property access on KlineTracker to public
+    * Fixed socket client timestamp offset bug
+
+* Version 10.3.1 - 27 Jan 2026
+    * Fixed potential collection modified exception upon logging message not handled in websocket message handling
+
+* Version 10.3.0 - 22 Jan 2026
+    * Added PlatformInfo class for specifying platform metadata
+    * Added better handling for enabling AutoTimestamp in client options when not implemented in the API
+    * Fixed state handling for subscriptions where queries do not get a response
+    * Fixed HandleSubQueryResponse not getting called
+    * Removed legacy websocket message handling and the corresponding UseUpdatedDeserialization client option
+
+* Version 10.2.5 - 19 Jan 2026
+    * Updated SymbolOrderBook.WaitUntilFirstUpdateBufferedAsync
+    * Added GetRestOffsets and GetWebsocketOffsets to TimeOffsetManager
+
+* Version 10.2.4 - 17 Jan 2026
+    * Added WaitUntilFirstUpdateBufferedAsync method on SymbolOrderBook
+    * Added some util methods
+    * Added CommaSplitStringConverter
+    * Fixed sequence validation bug SymbolOrderBook
+
+* Version 10.2.3 - 14 Jan 2026
+    * Added HandleUnhandledMessage virtual method to SocketApiClient to allow some processing for messages which couldn't be mapped via the normal way
+    * Fixed semaphore exception when creating a new REST client while time sync is in progress on another client
+
+* Version 10.2.2 - 13 Jan 2026
+    * Allow the same websocket connection sequence number to be recorded multiple times
+
+* Version 10.2.1 - 13 Jan 2026
+    * Removed duplicate logging for rest responses in Trace verbosity
+    * Fixed parameter URL creation for array values with ArrayParametersSerialization.MultipleValues
+
+* Version 10.2.0 - 12 Jan 2026
+    * Added EnforceSequenceNumbers property on SocketApiClient to configure whether websocket message contain sequence numbers and if these should be checked to be sequential
+    * Added fallback to existing websocket connection if no dedicated request connection was found
+    * Added IntBoolConverter base class for arbitrary int value to bool mapping
+    * Added SequenceNumber property to DataEvent object
+    * Added _skipSequenceCheckFirstUpdateAfterSnapshotSet property for SymbolOrderBook implementations
+    * Updated SymbolOrderBook sequenceNumber validation
+    * Updated SymbolOrderBook log verbosities
+    * Renamed SetInitialOrderBook to SetSnapshot in SymbolOrderBook
+    * Renamed updateId references to sequenceNumber in SymbolOrderBook
+
+* Version 10.1.0 - 07 Jan 2026
+    * Updated time sync / time offset management for REST API's
+    * Added time offset tracking for WebSocket API's
+    * Added GetAuthenticationQuery virtual method on AuthenticationProvider
+    * Updated AuthenticationProvider GetTimestamp methods to include a one second offset by default
+    * Added AuthenticationProvider GetTimestamp methods for SocketApiClient instances
+    * Added ClientName property on BaseApiClient, resolving to the type name
+    * Added ObjectOrArrayConverter JsonConverterFactory implementation for resolving json data which might be returned as object or array
+    * Added UpdateServerTime, UpdateLocalTime and DataAge properties to (I)SymbolOrderBook
+    * Added OutputToConsoleAsync method to (I)SymbolOrderBook
+    * Updated SymbolOrderBook string representation
+    * Added DataTimeLocal and DataAge properties to DataEvent object
+    * Added SocketConnection parameter to subscription HandleSubQueryResponse and HandleUnsubQueryResponse methods
+    * Added some utility methods
+
+* Version 10.0.2 - 19 Dec 2025
+    * Fixed duplicate subscription check with updated deserialization
+    * Added exception handlers for REST response processing
+
+* Version 10.0.1 - 18 Dec 2025
+    * Fixed query array parameter serialization
+
 * Version 10.0.0 - 16 Dec 2025
     * -
 

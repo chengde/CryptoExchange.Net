@@ -1,5 +1,7 @@
-﻿using CryptoExchange.Net.Interfaces.Clients;
+﻿using CryptoExchange.Net.Authentication;
+using CryptoExchange.Net.Interfaces.Clients;
 using CryptoExchange.Net.Logging.Extensions;
+using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Objects.Options;
 using CryptoExchange.Net.Objects.Sockets;
 using Microsoft.Extensions.Logging;
@@ -18,6 +20,11 @@ namespace CryptoExchange.Net.Clients
     public abstract class BaseSocketClient : BaseClient, ISocketClient
     {
         #region fields
+
+        /// <summary>
+        /// Api clients in this client
+        /// </summary>
+        internal new List<SocketApiClient> ApiClients => base.ApiClients.OfType<SocketApiClient>().ToList();
 
         /// <summary>
         /// If client is disposing
@@ -132,6 +139,59 @@ namespace CryptoExchange.Net.Clients
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Update options
+        /// </summary>
+        public virtual void SetOptions(UpdateOptions options)
+        {
+            foreach (var apiClient in ApiClients)
+                apiClient.SetOptions(options);
+        }
+    }
+
+    /// <inheritdoc />
+    public abstract class BaseSocketClient<TEnvironment, TApiCredentials> : BaseSocketClient, ISocketClient<TApiCredentials>
+        where TEnvironment : TradeEnvironment
+        where TApiCredentials : ApiCredentials
+    {
+        /// <summary>
+        /// Api clients in this client
+        /// </summary>
+        internal new List<SocketApiClient<TEnvironment, TApiCredentials>> ApiClients => base.ApiClients.OfType<SocketApiClient<TEnvironment, TApiCredentials>>().ToList();
+
+        /// <summary>
+        /// Provided client options
+        /// </summary>
+        public new SocketExchangeOptions<TEnvironment, TApiCredentials> ClientOptions => (SocketExchangeOptions<TEnvironment, TApiCredentials>)base.ClientOptions;
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        /// <param name="loggerFactory">Logger factory</param>
+        /// <param name="name">The name of the API this client is for</param>
+        protected BaseSocketClient(ILoggerFactory? loggerFactory, string name) : base(loggerFactory, name)
+        {
+        }
+
+        /// <summary>
+        /// Set the API credentials for this client. All Api clients in this client will use the new credentials, regardless of earlier set options.
+        /// </summary>
+        /// <param name="credentials">The credentials to set</param>
+        public virtual void SetApiCredentials(TApiCredentials credentials)
+        {
+            foreach (var apiClient in ApiClients)
+                apiClient.SetApiCredentials(credentials);
+        }
+
+        /// <summary>
+        /// Update options
+        /// </summary>
+        public virtual void SetOptions(UpdateOptions<TApiCredentials> options)
+        {
+            foreach (var apiClient in ApiClients)
+                apiClient.SetOptions(options);
         }
     }
 }

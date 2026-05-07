@@ -1,4 +1,6 @@
-﻿using CryptoExchange.Net.Objects;
+﻿using CryptoExchange.Net.Authentication;
+using CryptoExchange.Net.Objects;
+using CryptoExchange.Net.Objects.Options;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -19,7 +21,7 @@ namespace CryptoExchange.Net
         public static ILogger? StaticLogger
         {
             get => _staticLogger;
-            internal set  
+            internal set
             {
                 if (_staticLogger != null)
                     return;
@@ -53,6 +55,7 @@ namespace CryptoExchange.Net
             { "Kucoin.SpotKey", "f8ae62cb-2b3d-420c-8c98-e1c17dd4e30a" },
             { "Mexc", "EASYT" },
             { "OKX", "1425d83a94fbBCDE" },
+            { "Weex", "b-WEEX111124-" },
             { "XT", "4XWeqN10M1fcoI5L" },
         };
 
@@ -105,31 +108,36 @@ namespace CryptoExchange.Net
         /// <summary>
         /// Create a new HttpMessageHandler instance
         /// </summary>  
-        public static HttpMessageHandler CreateHttpClientMessageHandler(ApiProxy? proxy, TimeSpan? keepAliveInterval)
+        public static HttpMessageHandler CreateHttpClientMessageHandler(RestExchangeOptions options)
         {
 #if NET5_0_OR_GREATER
             var socketHandler = new SocketsHttpHandler();
             try
             {
-                if (keepAliveInterval != null && keepAliveInterval != TimeSpan.Zero)
+                if (options.HttpKeepAliveInterval != null && options.HttpKeepAliveInterval != TimeSpan.Zero)
                 {
                     socketHandler.KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always;
-                    socketHandler.KeepAlivePingDelay = keepAliveInterval.Value;
+                    socketHandler.KeepAlivePingDelay = options.HttpKeepAliveInterval.Value;
                     socketHandler.KeepAlivePingTimeout = TimeSpan.FromSeconds(10);
                 }
 
                 socketHandler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
                 socketHandler.DefaultProxyCredentials = CredentialCache.DefaultCredentials;
+
+                socketHandler.EnableMultipleHttp2Connections = options.HttpEnableMultipleHttp2Connections;
+                socketHandler.PooledConnectionLifetime = options.HttpPooledConnectionLifetime;
+                socketHandler.PooledConnectionIdleTimeout = options.HttpPooledConnectionIdleTimeout;
+                socketHandler.MaxConnectionsPerServer = options.HttpMaxConnectionsPerServer;
             }
             catch (PlatformNotSupportedException) { }
             catch (NotImplementedException) { } // Mono runtime throws NotImplementedException
 
-            if (proxy != null)
+            if (options.Proxy != null)
             {
                 socketHandler.Proxy = new WebProxy
                 {
-                    Address = new Uri($"{proxy.Host}:{proxy.Port}"),
-                    Credentials = proxy.Password == null ? null : new NetworkCredential(proxy.Login, proxy.Password)
+                    Address = new Uri($"{options.Proxy.Host}:{options.Proxy.Port}"),
+                    Credentials = options.Proxy.Password == null ? null : new NetworkCredential(options.Proxy.Login, options.Proxy.Password)
                 };
             }
             return socketHandler;
@@ -143,12 +151,12 @@ namespace CryptoExchange.Net
             catch (PlatformNotSupportedException) { }
             catch (NotImplementedException) { } // Mono runtime throws NotImplementedException
 
-            if (proxy != null)
+            if (options.Proxy != null)
             {
                 httpHandler.Proxy = new WebProxy
                 {
-                    Address = new Uri($"{proxy.Host}:{proxy.Port}"),
-                    Credentials = proxy.Password == null ? null : new NetworkCredential(proxy.Login, proxy.Password)
+                    Address = new Uri($"{options.Proxy.Host}:{options.Proxy.Port}"),
+                    Credentials = options.Proxy.Password == null ? null : new NetworkCredential(options.Proxy.Login, options.Proxy.Password)
                 };
             }
             return httpHandler;

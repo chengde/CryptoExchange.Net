@@ -259,11 +259,11 @@ namespace CryptoExchange.Net.Trackers.Trades
                 var startTime = Period == null ? DateTime.UtcNow.AddMinutes(-5) : DateTime.UtcNow.Add(-Period.Value);
                 var request = new GetTradeHistoryRequest(Symbol, startTime, DateTime.UtcNow);
                 var data = new List<SharedTrade>();
-                await foreach(var result in ExchangeHelpers.ExecutePages(_historyRestClient.GetTradeHistoryAsync, request).ConfigureAwait(false))
+                await foreach (var result in ExchangeHelpers.ExecutePages(_historyRestClient.GetTradeHistoryAsync, request).ConfigureAwait(false))
                 {
                     if (!result)
                         return result;
-                    
+
                     if (Limit != null && data.Count > Limit)
                         break;
 

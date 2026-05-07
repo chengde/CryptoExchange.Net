@@ -21,12 +21,14 @@
 @using HTX.Net.Interfaces
 @using HyperLiquid.Net.Interfaces
 @using Kraken.Net.Interfaces
+@using Kucoin.Net
 @using Kucoin.Net.Clients
 @using Kucoin.Net.Interfaces
 @using Mexc.Net.Interfaces
 @using OKX.Net.Interfaces;
 @using Upbit.Net.Interfaces;
 @using Toobit.Net.Interfaces;
+@using Weex.Net.Interfaces
 @using WhiteBit.Net.Interfaces
 @using XT.Net.Interfaces
 @inject IAsterOrderBookFactory asterFactory
@@ -52,6 +54,7 @@
 @inject IOKXOrderBookFactory okxFactory
 @inject IToobitOrderBookFactory toobitFactory
 @inject IUpbitOrderBookFactory upbitFactory
+@inject IWeexOrderBookFactory weexFactory
 @inject IWhiteBitOrderBookFactory whitebitFactory
 @inject IXTOrderBookFactory xtFactory
 @implements IDisposable
@@ -62,6 +65,7 @@
     {
         <div style="margin-bottom: 20px; flex: 1; min-width: 300px;">
             <h4>@book.Key - @book.Value.Symbol</h4>
+            <div>@(book.Value.DataAge?.TotalMilliseconds)ms since last update</div>
             @if (book.Value.AskCount >= 3 && book.Value.BidCount >= 3)
             {
                 for (var i = 0; i < 3; i++)
@@ -82,7 +86,7 @@
         // Since the Kucoin order book stream needs authentication we will need to provide API credentials beforehand
         KucoinRestClient.SetDefaultOptions(options =>
         {
-            options.ApiCredentials = new ApiCredentials("KEY", "SECRET", "PASSPHRASE");
+            options.ApiCredentials = new KucoinCredentials("KEY", "SECRET", "PASSPHRASE");
         });
 
         _books = new Dictionary<string, ISymbolOrderBook>
@@ -110,6 +114,7 @@
                 { "OKX", okxFactory.Create("ETH-BTC") },
                 { "Toobit", toobitFactory.CreateSpot("ETHUSDT") },
                 { "Upbit", upbitFactory.CreateSpot("BTC-ETH") },
+                { "Weex", weexFactory.CreateSpot("ETHUSDT") },
                 { "WhiteBit", whitebitFactory.CreateV4("ETH_BTC") },
                 { "XT", xtFactory.CreateSpot("eth_btc") },
             };

@@ -13,8 +13,11 @@ namespace CryptoExchange.Net.Testing
             if (message.Contains("Cannot map"))
                 throw new Exception("Enum value error: " + message);
 
-            if (message.Contains("Received null enum value"))
+            if (message.Contains("Received null or empty enum value"))
                 throw new Exception("Enum null error: " + message);
+
+            if (message.Contains("Enum mapping sub-optimal."))
+                throw new Exception("Enum mapping error: " + message);
         }
 
         public override void WriteLine(string? message)
@@ -25,8 +28,11 @@ namespace CryptoExchange.Net.Testing
             if (message.Contains("Cannot map"))
                 throw new Exception("Enum value error: " + message);
 
-            if (message.Contains("Received null enum value"))
+            if (message.Contains("Received null or empty enum value"))
                 throw new Exception("Enum null error: " + message);
+
+            if (message.Contains("Enum mapping sub-optimal."))
+                throw new Exception("Enum mapping error: " + message);
         }
     }
 }

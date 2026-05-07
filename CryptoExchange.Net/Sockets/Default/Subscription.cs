@@ -1,5 +1,6 @@
 ﻿using CryptoExchange.Net.Interfaces;
 using CryptoExchange.Net.Objects;
+using CryptoExchange.Net.Sockets.Default.Routing;
 using CryptoExchange.Net.Sockets.Interfaces;
 using Microsoft.Extensions.Logging;
 using System;
@@ -46,7 +47,7 @@ namespace CryptoExchange.Net.Sockets.Default
                     return;
 
                 _status = value;
-                Task.Run(() => StatusChanged?.Invoke(value));
+                StatusChanged?.Invoke(value);
             }
         }
 
@@ -70,15 +71,21 @@ namespace CryptoExchange.Net.Sockets.Default
         /// </summary>
         public bool Authenticated { get; }
 
-        /// <summary>
-        /// Matcher for this subscription
-        /// </summary>
-        public MessageMatcher MessageMatcher { get; set; }
 
+        private MessageRouter _router;
         /// <summary>
         /// Router for this subscription
         /// </summary>
-        public MessageRouter MessageRouter { get; set; }
+        public MessageRouter MessageRouter
+        {
+            get => _router;
+            set
+            {
+                _router = value;
+                _router.BuildSubscriptionRouter();
+                OnMessageRouterUpdated?.Invoke();
+            }
+        }
 
         /// <summary>
         /// Cancellation token registration
@@ -113,6 +120,9 @@ namespace CryptoExchange.Net.Sockets.Default
         /// The number of individual streams in this subscription
         /// </summary>
         public int IndividualSubscriptionCount { get; set; } = 1;
+
+        /// <inheritdoc />
+        public event Action? OnMessageRouterUpdated;
 
         /// <summary>
         /// ctor
@@ -149,14 +159,12 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <summary>
         /// Handle a subscription query response
         /// </summary>
-        /// <param name="message"></param>
-        public virtual void HandleSubQueryResponse(object? message) { }
+        public virtual void HandleSubQueryResponse(SocketConnection connection, object? message) { }
 
         /// <summary>
         /// Handle an unsubscription query response
         /// </summary>
-        /// <param name="message"></param>
-        public virtual void HandleUnsubQueryResponse(object message) { }
+        public virtual void HandleUnsubQueryResponse(SocketConnection connection, object? message) { }
 
         /// <summary>
         /// Create a new unsubscription query
@@ -174,27 +182,23 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <returns></returns>
         protected abstract Query? GetUnsubQuery(SocketConnection connection);
 
-        /// <inheritdoc />
-        public virtual CallResult<object> Deserialize(IMessageAccessor message, Type type) => message.Deserialize(type);
-
         /// <summary>
         /// Handle an update message
         /// </summary>
-        public CallResult Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object data, MessageHandlerLink matcher)
+        public bool Handle(string typeIdentifier, string? topicFilter, SocketConnection connection, DateTime receiveTime, string? originalData, object data)
         {
             ConnectionInvocations++;
             TotalInvocations++;
-            return matcher.Handle(connection, receiveTime, originalData, data);
-        }
 
-        /// <summary>
-        /// Handle an update message
-        /// </summary>
-        public CallResult? Handle(SocketConnection connection, DateTime receiveTime, string? originalData, object data, MessageRoute route)
-        {
-            ConnectionInvocations++;
-            TotalInvocations++;
-            return route.Handle(connection, receiveTime, originalData, data);
+            if (SubscriptionQuery != null && !SubscriptionQuery.Completed && SubscriptionQuery.TimeoutBehavior == TimeoutBehavior.Succeed)
+            {
+                // The subscription query is one where it is successful if there is no error returned
+                // Since we've received a data update for the subscription we can assume the subscribe query was successful
+                // Call timeout to complete 
+                SubscriptionQuery.Timeout();
+            }
+
+            return MessageRouter.Handle(typeIdentifier, topicFilter, connection, receiveTime, originalData, data, out _);
         }
 
         /// <summary>
@@ -226,12 +230,12 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <param name="Id">The id of the subscription</param>
         /// <param name="Status">Subscription status</param>
         /// <param name="Invocations">Number of times this subscription got a message</param>
-        /// <param name="ListenMatcher">Matcher for this subscription</param>
+        /// <param name="MessageRouter">Router for this subscription</param>
         public record SubscriptionState(
             int Id,
             SubscriptionStatus Status,
             int Invocations,
-            MessageMatcher ListenMatcher
+            MessageRouter MessageRouter
         );
 
         /// <summary>
@@ -240,7 +244,7 @@ namespace CryptoExchange.Net.Sockets.Default
         /// <returns></returns>
         public SubscriptionState GetState()
         {
-            return new SubscriptionState(Id, Status, TotalInvocations, MessageMatcher);
+            return new SubscriptionState(Id, Status, TotalInvocations, MessageRouter);
         }
     }
 }
