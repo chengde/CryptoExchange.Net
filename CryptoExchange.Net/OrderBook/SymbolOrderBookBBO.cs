@@ -127,6 +127,15 @@ namespace CryptoExchange.Net.OrderBook
         public DateTime UpdateTime { get; private set; }
 
         /// <inheritdoc/>
+        public DateTime? UpdateServerTime { get; private set; }
+
+        /// <inheritdoc/>
+        public DateTime? UpdateLocalTime { get; set; }
+
+        /// <inheritdoc/>
+        public TimeSpan? DataAge => DateTime.UtcNow - UpdateLocalTime;
+
+        /// <inheritdoc/>
         public int AskCount { get; private set; }
 
         /// <inheritdoc/>
@@ -384,6 +393,22 @@ namespace CryptoExchange.Net.OrderBook
             }
 
             return new CallResult<bool>(true);
+        }
+
+        /// <inheritdoc />
+        public Task OutputToConsoleAsync(int numberOfEntries, TimeSpan refreshInterval, CancellationToken ct = default)
+        {
+            return Task.Run(async () =>
+            {
+                var referenceTime = DateTime.UtcNow;
+                while (!ct.IsCancellationRequested)
+                {
+                    Console.Clear();
+                    Console.WriteLine(ToString(numberOfEntries));
+                    var delay = Math.Max(1, (DateTime.UtcNow - referenceTime).TotalMilliseconds % refreshInterval.TotalMilliseconds);
+                    try { await Task.Delay(refreshInterval.Add(TimeSpan.FromMilliseconds(-delay)), ct).ConfigureAwait(false); } catch { }
+                }
+            });
         }
 
         /// <summary>
